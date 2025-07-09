@@ -197,6 +197,23 @@ namespace BitcoinFinder
 
             // --- Инициализация статуса ---
             UpdateUiForMode();
+
+            // --- Настройка элементов управления ---
+            SetupControls();
+
+            // --- Загрузка сохраненных значений ---
+            TryAutoLoadLastProgress();
+
+            // --- Настройка обработчиков событий для валидации ---
+            txtSeedPhrase.TextChanged += AnySearchParamChanged;
+            txtBitcoinAddress.TextChanged += AnySearchParamChanged;
+            txtBitcoinAddress.TextChanged += TxtBitcoinAddress_TextChanged_SaveConfig;
+            cmbWordCount.SelectedIndexChanged += AnySearchParamChanged;
+            chkFullSearch.CheckedChanged += AnySearchParamChanged;
+            numThreads.ValueChanged += AnySearchParamChanged;
+
+            // --- Валидация полей при запуске ---
+            ValidateSearchFields(null, EventArgs.Empty);
         }
 
         private void LoadBIP39Words()
@@ -702,6 +719,12 @@ namespace BitcoinFinder
             this.lblTimeLeft.Size = new Size(160, 18);
             this.lblTimeLeft.Text = "ОСТАЛОСЬ: 0 секунд";
             this.lblTimeLeft.Font = largeBoldFont;
+
+            // --- Загрузка значений из конфигурации ---
+            if (Program.Config != null)
+            {
+                this.txtBitcoinAddress.Text = Program.Config.DefaultBitcoinAddress;
+            }
         }
 
         private void GenerateRandomSeedPhrase()
