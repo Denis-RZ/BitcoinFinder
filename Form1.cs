@@ -56,6 +56,19 @@ namespace BitcoinFinder
         private Button btnCopyPhrase;
         private Label lblProgressStatus;
         private Button btnServerMonitor;
+        private MenuStrip mainMenu;
+        private ToolStripMenuItem serverMenu;
+        private ToolStripMenuItem openServerFormMenuItem;
+        private TextBox txtServerIpDisplay;
+        private TextBox txtServerPortDisplay;
+        private StatusStrip statusStrip;
+        private ToolStripStatusLabel statusLabelMode;
+        private ToolStripStatusLabel statusLabelIp;
+        private ToolStripStatusLabel statusLabelPort;
+        private ToolStripStatusLabel statusLabelState;
+        private RadioButton radioServerMode;
+        private RadioButton radioAgentMode;
+        private Panel modePanel;
 
         private ProgressData? loadedProgressData = null;
         private bool isProgressLoaded = false;
@@ -80,82 +93,110 @@ namespace BitcoinFinder
         private CancellationTokenSource? agentCts;
         private Task? agentTask;
 
+        private FlowLayoutPanel agentPanel;
+
+        private GroupBox groupMode;
+        private GroupBox groupConnect;
+
         public Form1()
         {
             InitializeComponent();
             advancedFinder = new AdvancedSeedPhraseFinder();
             LoadBIP39Words();
             SetupBackgroundWorker();
-            // --- UI для режима агента ---
-            chkAgentMode = new CheckBox();
-            chkAgentMode.Text = "Работать как агент (подключаться к серверу)";
-            chkAgentMode.Font = new Font("Segoe UI", 11F);
-            chkAgentMode.Dock = DockStyle.Top;
-            chkAgentMode.CheckedChanged += ChkAgentMode_CheckedChanged;
-            txtAgentIp = new TextBox();
-            txtAgentIp.Width = 120;
-            txtAgentIp.Text = "127.0.0.1";
-            txtAgentPort = new TextBox();
-            txtAgentPort.Width = 60;
-            txtAgentPort.Text = "5000";
+
+            // --- Меню ---
+            mainMenu = new MenuStrip();
+            serverMenu = new ToolStripMenuItem("Сервер");
+            openServerFormMenuItem = new ToolStripMenuItem("Открыть серверную форму");
+            openServerFormMenuItem.Click += (s, e) => {
+                var serverForm = new ServerForm();
+                serverForm.Show();
+            };
+            serverMenu.DropDownItems.Add(openServerFormMenuItem);
+            mainMenu.Items.Add(serverMenu);
+            this.MainMenuStrip = mainMenu;
+            this.Controls.Add(mainMenu);
+
+            // --- Блок выбора режима ---
+            groupMode = new GroupBox();
+            groupMode.Text = "Режим работы";
+            groupMode.Dock = DockStyle.Top;
+            groupMode.Height = 60;
+            groupMode.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            var modeLayout = new FlowLayoutPanel();
+            modeLayout.Dock = DockStyle.Fill;
+            radioServerMode = new RadioButton();
+            radioServerMode.Text = "Сервер";
+            radioServerMode.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            radioServerMode.Checked = true;
+            radioServerMode.AutoSize = true;
+            radioServerMode.CheckedChanged += RadioMode_CheckedChanged;
+            radioAgentMode = new RadioButton();
+            radioAgentMode.Text = "Агент";
+            radioAgentMode.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            radioAgentMode.AutoSize = true;
+            radioAgentMode.CheckedChanged += RadioMode_CheckedChanged;
+            modeLayout.Controls.Add(radioServerMode);
+            modeLayout.Controls.Add(radioAgentMode);
+            groupMode.Controls.Add(modeLayout);
+            this.Controls.Add(groupMode);
+
+            // --- Блок параметров подключения ---
+            groupConnect = new GroupBox();
+            groupConnect.Text = "Параметры подключения";
+            groupConnect.Dock = DockStyle.Top;
+            groupConnect.Height = 70;
+            groupConnect.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            var connectLayout = new FlowLayoutPanel();
+            connectLayout.Dock = DockStyle.Fill;
+            connectLayout.WrapContents = false;
+            connectLayout.AutoSize = true;
+            connectLayout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            connectLayout.Padding = new Padding(8, 8, 8, 8);
+            connectLayout.Controls.Add(new Label { Text = "IP сервера:", AutoSize = true, Font = new Font("Segoe UI", 11F) });
+            txtServerIpDisplay = new TextBox();
+            txtServerIpDisplay.Width = 120;
+            txtServerIpDisplay.Text = "127.0.0.1";
+            connectLayout.Controls.Add(txtServerIpDisplay);
+            connectLayout.Controls.Add(new Label { Text = "Порт:", AutoSize = true, Font = new Font("Segoe UI", 11F) });
+            txtServerPortDisplay = new TextBox();
+            txtServerPortDisplay.Width = 60;
+            txtServerPortDisplay.Text = "5000";
+            connectLayout.Controls.Add(txtServerPortDisplay);
+            txtAgentIp = txtServerIpDisplay;
+            txtAgentPort = txtServerPortDisplay;
             btnAgentConnect = new Button();
             btnAgentConnect.Text = "Подключиться";
             btnAgentConnect.Width = 120;
             btnAgentConnect.Click += BtnAgentConnect_Click;
+            connectLayout.Controls.Add(btnAgentConnect);
             lblAgentStatus = new Label();
             lblAgentStatus.Text = "Статус: Отключено";
             lblAgentStatus.Font = new Font("Segoe UI", 10F);
-            lblAgentStatus.Dock = DockStyle.Top;
-            // --- Добавляем в форму ---
-            var agentPanel = new FlowLayoutPanel();
-            agentPanel.Dock = DockStyle.Top;
-            agentPanel.Height = 40;
-            agentPanel.Controls.Add(chkAgentMode);
-            agentPanel.Controls.Add(new Label { Text = "IP сервера:", AutoSize = true, Font = new Font("Segoe UI", 11F) });
-            agentPanel.Controls.Add(txtAgentIp);
-            agentPanel.Controls.Add(new Label { Text = "Порт:", AutoSize = true, Font = new Font("Segoe UI", 11F) });
-            agentPanel.Controls.Add(txtAgentPort);
-            agentPanel.Controls.Add(btnAgentConnect);
-            agentPanel.Controls.Add(lblAgentStatus);
-            Controls.Add(agentPanel);
-            // --- Автозаполнение адреса из конфига ---
-            if (string.IsNullOrWhiteSpace(txtBitcoinAddress.Text))
-            {
-                txtBitcoinAddress.Text = Program.Config.DefaultBitcoinAddress;
-            }
-            txtBitcoinAddress.TextChanged += TxtBitcoinAddress_TextChanged_SaveConfig;
-            // Подписка на сброс прогресса при изменении параметров
-            txtSeedPhrase.TextChanged += AnySearchParamChanged;
-            txtBitcoinAddress.TextChanged += AnySearchParamChanged;
-            cmbWordCount.SelectedIndexChanged += AnySearchParamChanged;
-            chkFullSearch.CheckedChanged += AnySearchParamChanged;
-            numThreads.ValueChanged += AnySearchParamChanged;
-            // --- Автозагрузка последнего прогресса ---
-            TryAutoLoadLastProgress();
-            // Добавляем лейбл для последней проверенной фразы
-            // lblLastPhrase = new Label(); // Удален
-            // lblLastPhrase.Font = new Font("Consolas", 10F); // Удален
-            // lblLastPhrase.Dock = DockStyle.Top; // Удален
-            // lblLastPhrase.AutoSize = true; // Удален
-            // lblLastPhrase.Text = "Последний приватный ключ: —"; // Удален
-            // Controls.Add(lblLastPhrase); // Удален
-            // lblProgressStatus теперь инициализируется только в InitializeComponent
-            this.FormClosing += Form1_FormClosing;
-            autoSaveTimer = new System.Windows.Forms.Timer();
-            autoSaveTimer.Interval = 60000; // 1 минута
-            autoSaveTimer.Tick += (s, e) => SaveProgressFromForm();
-            autoSaveTimer.Start();
-            // Добавить кнопку для открытия ServerMonitorForm
-            btnServerMonitor = new Button();
-            btnServerMonitor.Text = "Монитор сервера";
-            btnServerMonitor.Width = 160;
-            btnServerMonitor.Enabled = false; // по умолчанию выключена
-            btnServerMonitor.Click += (s, e) => {
-                var monitor = new ServerMonitorForm(serverInstance); // serverInstance — объект сервера
-                monitor.Show();
-            };
-            // Добавить кнопку на панель управления (например, Controls.Add(btnServerMonitor);)
-            Controls.Add(btnServerMonitor);
+            lblAgentStatus.AutoSize = true;
+            connectLayout.Controls.Add(lblAgentStatus);
+            groupConnect.Controls.Add(connectLayout);
+            this.Controls.Add(groupConnect);
+
+            // --- StatusStrip ---
+            statusStrip = new StatusStrip();
+            statusLabelMode = new ToolStripStatusLabel();
+            statusLabelIp = new ToolStripStatusLabel();
+            statusLabelPort = new ToolStripStatusLabel();
+            statusLabelState = new ToolStripStatusLabel();
+            statusStrip.Items.Add(statusLabelMode);
+            statusStrip.Items.Add(statusLabelIp);
+            statusStrip.Items.Add(statusLabelPort);
+            statusStrip.Items.Add(statusLabelState);
+            this.Controls.Add(statusStrip);
+
+            // --- Подпишемся на изменение IP/порта для обновления отображения ---
+            txtServerIpDisplay.TextChanged += TxtAgentIp_TextChanged;
+            txtServerPortDisplay.TextChanged += TxtAgentPort_TextChanged;
+
+            // --- Инициализация статуса ---
+            UpdateUiForMode();
         }
 
         private void LoadBIP39Words()
@@ -445,7 +486,7 @@ namespace BitcoinFinder
             numThreads.Minimum = 1;
             numThreads.Maximum = 32;
             numThreads.Value = 4;
-            // --- Placeholder’ы и подписи для всех полей ---
+            // --- Placeholder'ы и подписи для всех полей ---
             txtSeedPhrase.PlaceholderText = "Введите seed-фразу или * для перебора";
             txtBitcoinAddress.PlaceholderText = "Введите адрес для поиска";
             // --- Инициализация статусной панели ---
@@ -1253,6 +1294,19 @@ namespace BitcoinFinder
             btnLoadProgress.Enabled = !agentMode;
             // Если режим — сервер, btnServerMonitor.Enabled = true; иначе false
             btnServerMonitor.Enabled = agentMode;
+            // --- Меню ---
+            openServerFormMenuItem.Enabled = !agentMode;
+            // --- IP/Порт отображение ---
+            if (agentMode)
+            {
+                txtServerIpDisplay.Text = txtAgentIp.Text;
+                txtServerPortDisplay.Text = txtAgentPort.Text;
+            }
+            else
+            {
+                txtServerIpDisplay.Text = "127.0.0.1";
+                txtServerPortDisplay.Text = "5000";
+            }
         }
 
         private void BtnAgentConnect_Click(object? sender, EventArgs e)
@@ -1317,7 +1371,7 @@ namespace BitcoinFinder
                                 long endIndex = Convert.ToInt64(msg["endIndex"]);
                                 int wordCount = Convert.ToInt32(msg["wordCount"]);
                                 string address = msg.ContainsKey("address") ? msg["address"].ToString() : "";
-                                string seed = msg.ContainsKey("seed") ? msg["seed"].ToString() : "";
+                                bool fullSearch = msg.ContainsKey("fullSearch") && Convert.ToBoolean(msg["fullSearch"]);
                                 this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Работаю над блоком {blockId} ({startIndex}-{endIndex})"));
 
                                 int reportInterval = 10000; // каждые 10 000
@@ -1353,7 +1407,7 @@ namespace BitcoinFinder
                                         }
                                     }
                                     // Отправлять прогресс каждые reportInterval
-                                    if (i % reportInterval == 0)
+                                    if ((i - startIndex) % reportInterval == 0)
                                     {
                                         writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "REPORT_PROGRESS", blockId = blockId, currentIndex = i }));
                                         string? ack = reader.ReadLine();
@@ -1375,6 +1429,58 @@ namespace BitcoinFinder
                     lblAgentStatus.Text = $"Ошибка: {ex.Message}";
                     btnAgentConnect.Text = "Подключиться";
                 }));
+            }
+        }
+
+        private void RadioMode_CheckedChanged(object? sender, EventArgs e)
+        {
+            UpdateUiForMode();
+        }
+
+        private void UpdateUiForMode()
+        {
+            bool isAgent = radioAgentMode.Checked;
+            openServerFormMenuItem.Enabled = !isAgent;
+            groupConnect.Enabled = isAgent;
+            groupConnect.Visible = true;
+            if (isAgent)
+            {
+                groupConnect.BackColor = Color.AliceBlue;
+                btnAgentConnect.Visible = true;
+                lblAgentStatus.Visible = true;
+                txtServerIpDisplay.ReadOnly = false;
+                txtServerPortDisplay.ReadOnly = false;
+            }
+            else
+            {
+                groupConnect.BackColor = Color.Honeydew;
+                btnAgentConnect.Visible = false;
+                lblAgentStatus.Visible = false;
+                txtServerIpDisplay.ReadOnly = true;
+                txtServerPortDisplay.ReadOnly = true;
+            }
+            statusLabelMode.Text = isAgent ? "Режим: Агент" : "Режим: Сервер";
+            statusLabelMode.ForeColor = isAgent ? Color.RoyalBlue : Color.DarkGreen;
+            statusLabelIp.Text = $"IP: {txtServerIpDisplay.Text}";
+            statusLabelPort.Text = $"Порт: {txtServerPortDisplay.Text}";
+            statusLabelState.Text = isAgent ? lblAgentStatus.Text : "Сервер готов к работе";
+        }
+
+        // --- Подпишемся на изменение IP/порта для обновления отображения ---
+        private void TxtAgentIp_TextChanged(object? sender, EventArgs e)
+        {
+            if (radioAgentMode.Checked)
+            {
+                txtServerIpDisplay.Text = txtAgentIp.Text;
+                statusLabelIp.Text = $"IP: {txtAgentIp.Text}";
+            }
+        }
+        private void TxtAgentPort_TextChanged(object? sender, EventArgs e)
+        {
+            if (radioAgentMode.Checked)
+            {
+                txtServerPortDisplay.Text = txtAgentPort.Text;
+                statusLabelPort.Text = $"Порт: {txtAgentPort.Text}";
             }
         }
     }

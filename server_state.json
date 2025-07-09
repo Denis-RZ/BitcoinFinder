@@ -1,0 +1,100 @@
+{
+  "AllBlocks": [
+    {
+      "BlockId": 1,
+      "StartIndex": 0,
+      "EndIndex": 499,
+      "Status": "free",
+      "AssignedAgent": "",
+      "Progress": "0%",
+      "LastUpdate": "2025-07-09T14:10:08.3806519+08:00"
+    },
+    {
+      "BlockId": 2,
+      "StartIndex": 500,
+      "EndIndex": 999,
+      "Status": "free",
+      "AssignedAgent": "",
+      "Progress": "0%",
+      "LastUpdate": "2025-07-09T14:10:08.3806582+08:00"
+    },
+    {
+      "BlockId": 3,
+      "StartIndex": 1000,
+      "EndIndex": 1499,
+      "Status": "free",
+      "AssignedAgent": "",
+      "Progress": "0%",
+      "LastUpdate": "2025-07-09T14:10:08.3806585+08:00"
+    },
+    {
+      "BlockId": 4,
+      "StartIndex": 1500,
+      "EndIndex": 1999,
+      "Status": "free",
+      "AssignedAgent": "",
+      "Progress": "0%",
+      "LastUpdate": "2025-07-09T14:10:08.3806588+08:00"
+    },
+    {
+      "BlockId": 5,
+      "StartIndex": 2000,
+      "EndIndex": 2499,
+      "Status": "free",
+      "AssignedAgent": "",
+      "Progress": "0%",
+      "LastUpdate": "2025-07-09T14:10:08.3806592+08:00"
+    },
+    {
+      "BlockId": 6,
+      "StartIndex": 2500,
+      "EndIndex": 2999,
+      "Status": "free",
+      "AssignedAgent": "",
+      "Progress": "0%",
+      "LastUpdate": "2025-07-09T14:10:08.3806628+08:00"
+    },
+    {
+      "BlockId": 7,
+      "StartIndex": 3000,
+      "EndIndex": 3499,
+      "Status": "free",
+      "AssignedAgent": "",
+      "Progress": "0%",
+      "LastUpdate": "2025-07-09T14:10:08.3806631+08:00"
+    },
+    {
+      "BlockId": 8,
+      "StartIndex": 3500,
+      "EndIndex": 3999,
+      "Status": "free",
+      "AssignedAgent": "",
+      "Progress": "0%",
+      "LastUpdate": "2025-07-09T14:10:08.3806633+08:00"
+    },
+    {
+      "BlockId": 9,
+      "StartIndex": 4000,
+      "EndIndex": 4499,
+      "Status": "free",
+      "AssignedAgent": "",
+      "Progress": "0%",
+      "LastUpdate": "2025-07-09T14:10:08.3806635+08:00"
+    },
+    {
+      "BlockId": 10,
+      "StartIndex": 4500,
+      "EndIndex": 4999,
+      "Status": "free",
+      "AssignedAgent": "",
+      "Progress": "0%",
+      "LastUpdate": "2025-07-09T14:10:08.3806643+08:00"
+    }
+  ],
+  "FoundResults": [],
+  "BitcoinAddress": "1MCirzugBCrn5H6jHix6PJSLX7EqUEniBQ",
+  "WordCount": 12,
+  "FullSearch": true,
+  "BlockSize": 500,
+  "TotalCombinations": 5000
+}
