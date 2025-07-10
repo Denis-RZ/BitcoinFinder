@@ -1306,6 +1306,22 @@ namespace BitcoinFinder
                                 string seed = msg.ContainsKey("seed") ? msg["seed"].ToString() : "";
                                 this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Работаю над блоком {blockId} ({startIndex}-{endIndex})"));
 
+                                string progressFile = "agent_progress.json";
+                                if (File.Exists(progressFile))
+                                {
+                                    try
+                                    {
+                                        var json = File.ReadAllText(progressFile);
+                                        var prog = JsonSerializer.Deserialize<AgentProgress>(json);
+                                        if (prog != null && prog.blockId == blockId && prog.currentIndex >= startIndex && prog.currentIndex <= endIndex)
+                                        {
+                                            startIndex = prog.currentIndex;
+                                            this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Возобновление блока {blockId} с позиции {startIndex}"));
+                                        }
+                                    }
+                                    catch { }
+                                }
+
                                 int reportInterval = 10000; // каждые 10 000
                                 for (long i = startIndex; i <= endIndex && !token.IsCancellationRequested; i++)
                                 {
@@ -1343,11 +1359,18 @@ namespace BitcoinFinder
                                     {
                                         writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "REPORT_PROGRESS", blockId = blockId, currentIndex = i }));
                                         string? ack = reader.ReadLine();
+                                        try
+                                        {
+                                            var prog = new AgentProgress { blockId = blockId, currentIndex = i };
+                                            File.WriteAllText(progressFile, System.Text.Json.JsonSerializer.Serialize(prog));
+                                        }
+                                        catch { }
                                     }
                                 }
                                 // После завершения блока — сообщить о завершении
                                 writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "RELEASE_BLOCK", blockId = blockId }));
                                 string? ack2 = reader.ReadLine();
+                                try { File.Delete(progressFile); } catch { }
                                 this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Блок {blockId} завершён, жду новое задание..."));
                             }
                         }
@@ -1399,4 +1422,10 @@ namespace BitcoinFinder
         public List<string> CurrentPhrases { get; set; } = new List<string>();
         public string? CurrentPrivateKey { get; set; } // новый параметр
     }
-} 
+
+    public class AgentProgress
+    {
+        public int blockId { get; set; }
+        public long currentIndex { get; set; }
+    }
+}
