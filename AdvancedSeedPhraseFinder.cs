@@ -1104,7 +1104,7 @@ namespace BitcoinFinder
             Console.WriteLine($"Тест 3 (частичный): {(completed3 && progressCount3 > 0 && lastProgress3 > BigInteger.Zero ? "ПРОШЕЛ" : "НЕ ПРОШЕЛ")}");
         }
 
-        public void TestSpeedCalculation()
+        public async Task TestSpeedCalculationAsync(CancellationToken token)
         {
             speedHistory.Clear();
             BigInteger fakeTotal = 1000000;
@@ -1149,7 +1149,7 @@ namespace BitcoinFinder
                 var remaining = TimeSpan.FromSeconds(secondsLeft);
                 string speedStr = displaySpeed < 0 ? "нереально" : (displaySpeed < 1 ? "очень медленно" : displaySpeed.ToString("N0"));
                 Console.WriteLine($"Шаг {i+1,2}: Прогресс: {fakeCurrent:N0} / {fakeTotal:N0} | Скорость: {speedStr}/сек | Осталось: {(displaySpeed > 0 ? remaining.ToString() : "-")}");
-                Thread.Sleep((i % 7 == 0) ? 800 : 200); // иногда задержка
+                await Task.Delay((i % 7 == 0) ? 800 : 200, token); // иногда задержка
             }
             Console.WriteLine("Тест завершён.");
         }

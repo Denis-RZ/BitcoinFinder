@@ -1260,7 +1260,7 @@ namespace BitcoinFinder
                 btnAgentConnect.Text = "Подключиться";
             }
         }
-        private void AgentWorker(string ip, int port, CancellationToken token)
+        private async Task AgentWorker(string ip, int port, CancellationToken token)
         {
             while (!token.IsCancellationRequested)
             {
@@ -1289,14 +1289,14 @@ namespace BitcoinFinder
                             if (msg == null || !msg.ContainsKey("command"))
                             {
                                 this.Invoke(new Action(() => lblAgentStatus.Text = "Статус: Некорректный ответ сервера"));
-                                Thread.Sleep(5000);
+                                await Task.Delay(5000, token);
                                 continue;
                             }
                             string cmd = msg["command"].ToString();
                             if (cmd == "NO_TASK")
                             {
                                 this.Invoke(new Action(() => lblAgentStatus.Text = "Статус: Нет заданий, жду..."));
-                                Thread.Sleep(10000);
+                                await Task.Delay(10000, token);
                                 continue;
                             }
                             if (cmd == "TASK")
@@ -1394,7 +1394,7 @@ namespace BitcoinFinder
                     btnAgentConnect.Text = "Подключиться";
                 }));
                 if (!token.IsCancellationRequested)
-                    Thread.Sleep(5000);
+                    await Task.Delay(5000, token);
             }
         }
 
