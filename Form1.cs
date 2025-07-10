@@ -1400,7 +1400,9 @@ namespace BitcoinFinder
                 }));
                 if (!token.IsCancellationRequested)
                     await Task.Delay(5000, token);
+
             }
+        }
         }
 
         private static bool ResponseIsAck(string? resp)
