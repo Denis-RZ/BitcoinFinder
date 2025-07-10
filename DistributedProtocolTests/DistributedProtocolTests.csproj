@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <Compile Include="../DistributedProtocol.cs" Link="DistributedProtocol.cs" />
+    <Compile Include="../DistributedCoordinatorServer.cs" Link="DistributedCoordinatorServer.cs" />
   </ItemGroup>
 
   <ItemGroup>
