@@ -1276,6 +1276,7 @@ namespace BitcoinFinder
                     using (var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true })
                     {
                         var finder = new AdvancedSeedPhraseFinder();
+                        var agentClient = new DistributedAgentClient();
                         while (!token.IsCancellationRequested)
                         {
                             // Запросить задание
@@ -1322,7 +1323,7 @@ namespace BitcoinFinder
                                     catch { }
                                 }
 
-                                int reportInterval = 10000; // каждые 10 000
+                                int reportInterval = agentClient.ProgressReportInterval; // из конфигурации
                                 for (long i = startIndex; i <= endIndex && !token.IsCancellationRequested; i++)
                                 {
                                     // Генерируем seed-фразу по индексу
