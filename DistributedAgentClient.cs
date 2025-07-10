@@ -5,6 +5,10 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using BitcoinFinder.Distributed;
+
+using ProtoMessage = BitcoinFinder.Distributed.Message;
+using ProtoBlockTask = BitcoinFinder.Distributed.BlockTask;
 
 namespace BitcoinFinder
 {
@@ -17,6 +21,10 @@ namespace BitcoinFinder
         public Action<string>? OnLog { get; set; }
         public Action<long>? OnProgress { get; set; }
         public Action<string>? OnFound { get; set; }
+
+        private TcpClient? _client;
+        private StreamReader? _reader;
+        private StreamWriter? _writer;
 
         public async Task RunAgentAsync(Func<long, long, CancellationToken, Task> searchBlock, CancellationToken cancellationToken)
         {
@@ -95,6 +103,126 @@ namespace BitcoinFinder
         public async Task ReportFoundAsync(StreamWriter writer, int blockId, string phrase)
         {
             await writer.WriteLineAsync(JsonSerializer.Serialize(new { command = "REPORT_FOUND", blockId = blockId, combination = phrase }));
+        }
+
+        // ===== New protocol helper methods =====
+        public async Task<bool> ConnectToServer(string ip, int port, CancellationToken token = default)
+        {
+            ServerIp = ip;
+            ServerPort = port;
+            try
+            {
+                _client?.Dispose();
+                _client = new TcpClient();
+                await _client.ConnectAsync(ip, port, token);
+                var stream = _client.GetStream();
+                _reader = new StreamReader(stream, Encoding.UTF8);
+                _writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
+                Log($"[AGENT] Connected to server {ip}:{port}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"[AGENT] Connection error: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> SendMessage(ProtoMessage message)
+        {
+            if (_writer == null)
+            {
+                Log("[AGENT] SendMessage called before connection");
+                return false;
+            }
+            try
+            {
+                await _writer.WriteLineAsync(message.ToJson());
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"[AGENT] Send error: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<ProtoMessage?> ReceiveMessage(CancellationToken token = default)
+        {
+            if (_reader == null)
+            {
+                Log("[AGENT] ReceiveMessage called before connection");
+                return null;
+            }
+            try
+            {
+                var line = await _reader.ReadLineAsync();
+                if (line == null) return null;
+                return ProtoMessage.FromJson(line);
+            }
+            catch (Exception ex)
+            {
+                Log($"[AGENT] Receive error: {ex.Message}");
+                return null;
+            }
+        }
+
+        public Task<bool> SendRegisterMessage(string agentId)
+        {
+            var msg = new ProtoMessage
+            {
+                Type = MessageType.AGENT_REGISTER,
+                AgentId = agentId,
+                Timestamp = DateTime.UtcNow
+            };
+            return SendMessage(msg);
+        }
+
+        public Task<bool> RequestTask(string agentId)
+        {
+            var msg = new ProtoMessage
+            {
+                Type = MessageType.AGENT_REQUEST_TASK,
+                AgentId = agentId,
+                Timestamp = DateTime.UtcNow
+            };
+            return SendMessage(msg);
+        }
+
+        public async Task<ProtoBlockTask?> ReceiveTask(CancellationToken token = default)
+        {
+            var resp = await ReceiveMessage(token);
+            if (resp == null) return null;
+            if (resp.Type == MessageType.SERVER_TASK_ASSIGNED && resp.Data != null)
+            {
+                try
+                {
+                    return resp.Data.Value.Deserialize<ProtoBlockTask>();
+                }
+                catch (Exception ex)
+                {
+                    Log($"[AGENT] Failed to parse task: {ex.Message}");
+                    return null;
+                }
+            }
+            if (resp.Type == MessageType.SERVER_NO_TASKS)
+            {
+                Log("[AGENT] No tasks available");
+            }
+            return null;
+        }
+
+        public async Task ProcessTestBlock(ProtoBlockTask task, CancellationToken token = default)
+        {
+            Log($"[AGENT] Start processing block {task.BlockId} {task.StartIndex}-{task.EndIndex}");
+            long current = task.StartIndex;
+            while (current <= task.EndIndex && !token.IsCancellationRequested)
+            {
+                OnProgress?.Invoke(current);
+                await Task.Delay(10, token); // simulate work
+                current++;
+            }
+            Log($"[AGENT] Completed block {task.BlockId}");
         }
         private void Log(string msg)
         {
