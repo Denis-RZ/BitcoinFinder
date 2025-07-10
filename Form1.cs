@@ -85,61 +85,26 @@ namespace BitcoinFinder
             advancedFinder = new AdvancedSeedPhraseFinder();
             LoadBIP39Words();
             SetupBackgroundWorker();
+            
             // --- UI для режима агента ---
-            chkAgentMode = new CheckBox();
-            chkAgentMode.Text = "Работать как агент (подключаться к серверу)";
-            chkAgentMode.Font = new Font("Segoe UI", 11F);
-            chkAgentMode.Dock = DockStyle.Top;
-            chkAgentMode.CheckedChanged += ChkAgentMode_CheckedChanged;
-            txtAgentIp = new TextBox();
-            txtAgentIp.Width = 120;
-            txtAgentIp.Text = "127.0.0.1";
-            txtAgentPort = new TextBox();
-            txtAgentPort.Width = 60;
-            txtAgentPort.Text = "5000";
-            btnAgentConnect = new Button();
-            btnAgentConnect.Text = "Подключиться";
-            btnAgentConnect.Width = 120;
-            btnAgentConnect.Click += BtnAgentConnect_Click;
-            lblAgentStatus = new Label();
-            lblAgentStatus.Text = "Статус: Отключено";
-            lblAgentStatus.Font = new Font("Segoe UI", 10F);
-            lblAgentStatus.Dock = DockStyle.Top;
-            // --- Добавляем в форму ---
-            var agentPanel = new FlowLayoutPanel();
-            agentPanel.Dock = DockStyle.Top;
-            agentPanel.Height = 40;
-            agentPanel.Controls.Add(chkAgentMode);
-            agentPanel.Controls.Add(new Label { Text = "IP сервера:", AutoSize = true, Font = new Font("Segoe UI", 11F) });
-            agentPanel.Controls.Add(txtAgentIp);
-            agentPanel.Controls.Add(new Label { Text = "Порт:", AutoSize = true, Font = new Font("Segoe UI", 11F) });
-            agentPanel.Controls.Add(txtAgentPort);
-            agentPanel.Controls.Add(btnAgentConnect);
-            agentPanel.Controls.Add(lblAgentStatus);
-            Controls.Add(agentPanel);
-            // --- Автозаполнение адреса из конфига ---
-            if (string.IsNullOrWhiteSpace(txtBitcoinAddress.Text))
-            {
-                txtBitcoinAddress.Text = Program.Config.DefaultBitcoinAddress;
-            }
-            txtBitcoinAddress.TextChanged += TxtBitcoinAddress_TextChanged_SaveConfig;
+            SetupAgentControls();
+            
+            // --- Автозаполнение и конфиг ---
+            LoadFormConfig();
+            
             // Подписка на сброс прогресса при изменении параметров
             txtSeedPhrase.TextChanged += AnySearchParamChanged;
             txtBitcoinAddress.TextChanged += AnySearchParamChanged;
             cmbWordCount.SelectedIndexChanged += AnySearchParamChanged;
             chkFullSearch.CheckedChanged += AnySearchParamChanged;
             numThreads.ValueChanged += AnySearchParamChanged;
+            
             // --- Автозагрузка последнего прогресса ---
             TryAutoLoadLastProgress();
-            // Добавляем лейбл для последней проверенной фразы
-            // lblLastPhrase = new Label(); // Удален
-            // lblLastPhrase.Font = new Font("Consolas", 10F); // Удален
-            // lblLastPhrase.Dock = DockStyle.Top; // Удален
-            // lblLastPhrase.AutoSize = true; // Удален
-            // lblLastPhrase.Text = "Последний приватный ключ: —"; // Удален
-            // Controls.Add(lblLastPhrase); // Удален
-            // lblProgressStatus теперь инициализируется только в InitializeComponent
+            
             this.FormClosing += Form1_FormClosing;
+            
+            // Автосохранение каждую минуту
             autoSaveTimer = new System.Windows.Forms.Timer();
             autoSaveTimer.Interval = 60000; // 1 минута
             autoSaveTimer.Tick += (s, e) => SaveProgressFromForm();
@@ -455,200 +420,48 @@ namespace BitcoinFinder
             numThreads.ValueChanged += ValidateSearchFields;
         }
 
-        private void SetupControls()
+        private void SetupAgentControls()
         {
-            // Создаем шрифт 12pt для лучшей читаемости
-            Font largeFont = new Font("Microsoft Sans Serif", 12F, FontStyle.Regular);
-            Font largeBoldFont = new Font("Microsoft Sans Serif", 12F, FontStyle.Bold);
+            chkAgentMode = new CheckBox();
+            chkAgentMode.Text = "Работать как агент (подключаться к серверу)";
+            chkAgentMode.Font = new Font("Segoe UI", 11F);
+            chkAgentMode.Dock = DockStyle.Top;
+            chkAgentMode.CheckedChanged += ChkAgentMode_CheckedChanged;
             
-            // lblSeedPhrase
-            this.lblSeedPhrase.AutoSize = true;
-            this.lblSeedPhrase.Location = new Point(12, 15);
-            this.lblSeedPhrase.Name = "lblSeedPhrase";
-            this.lblSeedPhrase.Size = new Size(200, 15);
-            this.lblSeedPhrase.Text = "Seed фраза (через пробел, * для неизвестных):";
-            this.lblSeedPhrase.Font = largeFont;
-
-            // txtSeedPhrase
-            this.txtSeedPhrase.Location = new Point(12, 35);
-            this.txtSeedPhrase.Name = "txtSeedPhrase";
-            this.txtSeedPhrase.Size = new Size(600, 25);
-            this.txtSeedPhrase.Text = "* * * * * * * * * * * *";
-            this.txtSeedPhrase.PlaceholderText = "Введите известные слова, * для неизвестных";
-            this.txtSeedPhrase.Font = largeFont;
-
-            // lblBitcoinAddress
-            this.lblBitcoinAddress.AutoSize = true;
-            this.lblBitcoinAddress.Location = new Point(12, 70);
-            this.lblBitcoinAddress.Name = "lblBitcoinAddress";
-            this.lblBitcoinAddress.Size = new Size(150, 15);
-            this.lblBitcoinAddress.Text = "Биткоин адрес:";
-            this.lblBitcoinAddress.Font = largeFont;
-
-            // txtBitcoinAddress
-            this.txtBitcoinAddress.Location = new Point(12, 90);
-            this.txtBitcoinAddress.Name = "txtBitcoinAddress";
-            this.txtBitcoinAddress.Size = new Size(400, 25);
-            this.txtBitcoinAddress.Text = "1MCirzugBCrn5H6jHix6PJSLX7EqUEniBQ";
-            this.txtBitcoinAddress.PlaceholderText = "Введите биткоин адрес для поиска";
-            this.txtBitcoinAddress.Font = largeFont;
-
-            // lblWordCount
-            this.lblWordCount.AutoSize = true;
-            this.lblWordCount.Location = new Point(12, 125);
-            this.lblWordCount.Name = "lblWordCount";
-            this.lblWordCount.Size = new Size(100, 15);
-            this.lblWordCount.Text = "Количество слов:";
-            this.lblWordCount.Font = largeFont;
-
-            // cmbWordCount
-            this.cmbWordCount.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.cmbWordCount.Location = new Point(12, 145);
-            this.cmbWordCount.Name = "cmbWordCount";
-            this.cmbWordCount.Size = new Size(100, 25);
-            this.cmbWordCount.Items.AddRange(new object[] { "12", "18", "24" });
-            this.cmbWordCount.SelectedIndex = 0;
-            this.cmbWordCount.Font = largeFont;
-            this.cmbWordCount.SelectedIndexChanged += (s, e) => GenerateRandomSeedPhrase();
-
-            // chkFullSearch
-            this.chkFullSearch.AutoSize = true;
-            this.chkFullSearch.Location = new Point(130, 145);
-            this.chkFullSearch.Name = "chkFullSearch";
-            this.chkFullSearch.Size = new Size(200, 19);
-            this.chkFullSearch.Text = "Полный перебор (не помню фразу)";
-            this.chkFullSearch.Font = largeFont;
-            this.chkFullSearch.CheckedChanged += ChkFullSearch_CheckedChanged;
-
-            // lblThreads
-            this.lblThreads.AutoSize = true;
-            this.lblThreads.Location = new Point(12, 175);
-            this.lblThreads.Name = "lblThreads";
-            this.lblThreads.Size = new Size(80, 15);
-            this.lblThreads.Text = "Потоки:";
-            this.lblThreads.Font = largeFont;
-
-            // numThreads
-            this.numThreads.Location = new Point(12, 195);
-            this.numThreads.Name = "numThreads";
-            this.numThreads.Size = new Size(80, 25);
-            this.numThreads.Minimum = 1;
-            this.numThreads.Maximum = Environment.ProcessorCount;
-            this.numThreads.Value = Math.Min(Environment.ProcessorCount, 8);
-            this.numThreads.Font = largeFont;
-
-            // btnSearch
-            this.btnSearch.Location = new Point(12, 225);
-            this.btnSearch.Name = "btnSearch";
-            this.btnSearch.Size = new Size(100, 48);
-            this.btnSearch.MinimumSize = new Size(0, 48);
-            this.btnSearch.Padding = new Padding(0, 8, 0, 8);
-            this.btnSearch.Anchor = AnchorStyles.Top;
-            this.btnSearch.Text = "Начать поиск";
-            this.btnSearch.Font = largeFont;
-            this.btnSearch.Click += BtnSearch_Click;
-
-            // btnStop
-            this.btnStop.Location = new Point(120, 225);
-            this.btnStop.Name = "btnStop";
-            this.btnStop.Size = new Size(100, 48);
-            this.btnStop.MinimumSize = new Size(0, 48);
-            this.btnStop.Padding = new Padding(0, 8, 0, 8);
-            this.btnStop.Anchor = AnchorStyles.Top;
-            this.btnStop.Text = "Остановить";
-            this.btnStop.Font = largeFont;
-            this.btnStop.Enabled = false;
-            this.btnStop.Click += BtnStop_Click;
-
-            // btnSaveProgress
-            this.btnSaveProgress.Location = new Point(230, 225);
-            this.btnSaveProgress.Name = "btnSaveProgress";
-            this.btnSaveProgress.Size = new Size(100, 48);
-            this.btnSaveProgress.MinimumSize = new Size(0, 48);
-            this.btnSaveProgress.Padding = new Padding(0, 8, 0, 8);
-            this.btnSaveProgress.Anchor = AnchorStyles.Top;
-            this.btnSaveProgress.Text = "Сохранить";
-            this.btnSaveProgress.Font = largeFont;
-            this.btnSaveProgress.Click += BtnSaveProgress_Click;
-
-            // btnLoadProgress
-            this.btnLoadProgress.Location = new Point(340, 225);
-            this.btnLoadProgress.Name = "btnLoadProgress";
-            this.btnLoadProgress.Size = new Size(100, 48);
-            this.btnLoadProgress.MinimumSize = new Size(0, 48);
-            this.btnLoadProgress.Padding = new Padding(0, 8, 0, 8);
-            this.btnLoadProgress.Anchor = AnchorStyles.Top;
-            this.btnLoadProgress.Text = "Загрузить";
-            this.btnLoadProgress.Font = largeFont;
-            this.btnLoadProgress.Click += BtnLoadProgress_Click;
-
-            // progressBar
-            this.progressBar.Location = new Point(12, 265);
-            this.progressBar.Name = "progressBar";
-            this.progressBar.Size = new Size(600, 23);
-
-            // lblStatus
-            this.lblStatus.AutoSize = true;
-            this.lblStatus.Location = new Point(12, 295);
-            this.lblStatus.Name = "lblStatus";
-            this.lblStatus.Size = new Size(200, 15);
-            this.lblStatus.Text = "Готов к поиску";
-            this.lblStatus.Font = largeFont;
-
-            // lblProgress
-            this.lblProgress.AutoSize = true;
-            this.lblProgress.Location = new Point(12, 275);
-            this.lblProgress.Name = "lblProgress";
-            this.lblProgress.Size = new Size(400, 18);
-            this.lblProgress.Text = "ПРОВЕРЕНО: 0 из 0";
-            this.lblProgress.Font = largeBoldFont;
-
-            // lblResults
-            this.lblResults.AutoSize = true;
-            this.lblResults.Location = new Point(12, 350);
-            this.lblResults.Name = "lblResults";
-            this.lblResults.Size = new Size(100, 15);
-            this.lblResults.Text = "Результаты:";
-            this.lblResults.Font = largeFont;
-
-            // txtResults
-            this.txtResults.Location = new Point(12, 370);
-            this.txtResults.Multiline = true;
-            this.txtResults.Name = "txtResults";
-            this.txtResults.ReadOnly = true;
-            this.txtResults.ScrollBars = ScrollBars.Vertical;
-            this.txtResults.Size = new Size(760, 280);
-            this.txtResults.Font = new Font("Consolas", 9F);
-
-            // listBoxCurrentPhrases
-            this.listBoxCurrentPhrases.Location = new Point(12, 320);
-            this.listBoxCurrentPhrases.Size = new Size(760, 60);
-            this.listBoxCurrentPhrases.Name = "listBoxCurrentPhrases";
-            this.listBoxCurrentPhrases.Font = largeFont;
-
-            // lblSpeed
-            this.lblSpeed.AutoSize = true;
-            this.lblSpeed.Location = new Point(420, 275);
-            this.lblSpeed.Name = "lblSpeed";
-            this.lblSpeed.Size = new Size(200, 18);
-            this.lblSpeed.Text = "СКОРОСТЬ: 0 в секунду";
-            this.lblSpeed.Font = largeBoldFont;
-
-            // lblCurrentPhrase
-            this.lblCurrentPhrase.AutoSize = true;
-            this.lblCurrentPhrase.Location = new Point(12, 295);
-            this.lblCurrentPhrase.Name = "lblCurrentPhrase";
-            this.lblCurrentPhrase.Size = new Size(600, 18);
-            this.lblCurrentPhrase.Text = "Сейчас проверяем:";
-            this.lblCurrentPhrase.Font = largeFont;
-
-            // lblTimeLeft
-            this.lblTimeLeft.AutoSize = true;
-            this.lblTimeLeft.Location = new Point(620, 275);
-            this.lblTimeLeft.Name = "lblTimeLeft";
-            this.lblTimeLeft.Size = new Size(160, 18);
-            this.lblTimeLeft.Text = "ОСТАЛОСЬ: 0 секунд";
-            this.lblTimeLeft.Font = largeBoldFont;
+            txtAgentIp = new TextBox();
+            txtAgentIp.Width = 120;
+            txtAgentIp.Text = "127.0.0.1";
+            txtAgentIp.Enabled = false;
+            
+            txtAgentPort = new TextBox();
+            txtAgentPort.Width = 60;
+            txtAgentPort.Text = "5000";
+            txtAgentPort.Enabled = false;
+            
+            btnAgentConnect = new Button();
+            btnAgentConnect.Text = "Подключиться";
+            btnAgentConnect.Width = 120;
+            btnAgentConnect.Enabled = false;
+            btnAgentConnect.Click += BtnAgentConnect_Click;
+            
+            lblAgentStatus = new Label();
+            lblAgentStatus.Text = "Статус: Отключено";
+            lblAgentStatus.Font = new Font("Segoe UI", 10F);
+            lblAgentStatus.ForeColor = Color.Red;
+            lblAgentStatus.Dock = DockStyle.Top;
+            
+            // --- Добавляем в форму ---
+            var agentPanel = new FlowLayoutPanel();
+            agentPanel.Dock = DockStyle.Top;
+            agentPanel.Height = 40;
+            agentPanel.Controls.Add(chkAgentMode);
+            agentPanel.Controls.Add(new Label { Text = "IP сервера:", AutoSize = true, Font = new Font("Segoe UI", 11F) });
+            agentPanel.Controls.Add(txtAgentIp);
+            agentPanel.Controls.Add(new Label { Text = "Порт:", AutoSize = true, Font = new Font("Segoe UI", 11F) });
+            agentPanel.Controls.Add(txtAgentPort);
+            agentPanel.Controls.Add(btnAgentConnect);
+            agentPanel.Controls.Add(lblAgentStatus);
+            Controls.Add(agentPanel);
         }
 
         private void GenerateRandomSeedPhrase()
@@ -1158,29 +971,134 @@ namespace BitcoinFinder
 
         private void ValidateSearchFields(object? sender, EventArgs e)
         {
+            if (suppressParamEvents) return;
+            
             bool valid = true;
             string status = "Готов к поиску";
-            if (string.IsNullOrWhiteSpace(txtBitcoinAddress.Text))
+            
+            // Валидация Bitcoin адреса
+            string bitcoinAddress = txtBitcoinAddress.Text.Trim();
+            if (string.IsNullOrWhiteSpace(bitcoinAddress))
             {
                 valid = false;
                 status = "Введите биткоин-адрес!";
+                toolTip1.SetToolTip(txtBitcoinAddress, "Введите действительный Bitcoin адрес (Legacy, P2SH или Bech32)");
             }
-            else if (!chkFullSearch.Checked && string.IsNullOrWhiteSpace(txtSeedPhrase.Text))
+            else if (!IsValidBitcoinAddress(bitcoinAddress))
             {
                 valid = false;
-                status = "Введите seed-фразу!";
+                status = "Некорректный формат биткоин-адреса!";
+                toolTip1.SetToolTip(txtBitcoinAddress, "Поддерживаемые форматы:\n• Legacy (1...)\n• P2SH (3...)\n• Bech32 (bc1...)");
             }
-            else if (cmbWordCount.SelectedIndex > 0 && !chkFullSearch.Checked)
+            else
             {
-                int wordCount = int.Parse(cmbWordCount.SelectedItem.ToString()!);
-                if (txtSeedPhrase.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length != wordCount)
+                toolTip1.SetToolTip(txtBitcoinAddress, "✅ Корректный Bitcoin адрес");
+            }
+            
+            // Валидация seed фразы для не-полного поиска
+            if (!chkFullSearch.Checked)
+            {
+                string seedPhrase = txtSeedPhrase.Text.Trim();
+                if (string.IsNullOrWhiteSpace(seedPhrase))
                 {
                     valid = false;
-                    status = $"Количество слов в фразе должно быть {wordCount}";
+                    status = "Введите seed-фразу!";
+                    toolTip1.SetToolTip(txtSeedPhrase, "Введите seed-фразу (известные слова) или * для неизвестных позиций");
+                }
+                else if (cmbWordCount.SelectedIndex > 0) // не "Авто"
+                {
+                    int expectedWordCount = int.Parse(cmbWordCount.SelectedItem.ToString()!);
+                    var words = seedPhrase.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (words.Length != expectedWordCount)
+                    {
+                        valid = false;
+                        status = $"Количество слов в фразе должно быть {expectedWordCount}, а не {words.Length}";
+                        toolTip1.SetToolTip(txtSeedPhrase, $"Требуется ровно {expectedWordCount} слов. Используйте * для неизвестных позиций.");
+                    }
+                    else
+                    {
+                        // Проверяем валидность известных слов
+                        int unknownCount = 0;
+                        foreach (var word in words)
+                        {
+                            if (word == "*" || word.Contains("*"))
+                            {
+                                unknownCount++;
+                            }
+                            else if (!bip39Words.Contains(word))
+                            {
+                                valid = false;
+                                status = $"Слово '{word}' не найдено в BIP39 словаре!";
+                                toolTip1.SetToolTip(txtSeedPhrase, $"Неизвестное слово: '{word}'. Проверьте правописание или используйте *");
+                                break;
+                            }
+                        }
+                        
+                        if (valid)
+                        {
+                            toolTip1.SetToolTip(txtSeedPhrase, $"✅ {words.Length - unknownCount} известных слов, {unknownCount} для перебора");
+                        }
+                    }
+                }
+                else
+                {
+                    var words = seedPhrase.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    int unknownCount = words.Count(w => w == "*" || w.Contains("*"));
+                    toolTip1.SetToolTip(txtSeedPhrase, $"Автоопределение: {words.Length} слов, {unknownCount} для перебора");
                 }
             }
-            btnSearch.Enabled = valid;
+            else
+            {
+                toolTip1.SetToolTip(txtSeedPhrase, "Полный перебор всех комбинаций выбранной длины");
+            }
+            
+            // Валидация количества потоков
+            int maxThreads = Environment.ProcessorCount * 2;
+            if (numThreads.Value < 1 || numThreads.Value > maxThreads)
+            {
+                valid = false;
+                status = $"Количество потоков должно быть от 1 до {maxThreads}";
+                toolTip1.SetToolTip(numThreads, $"Рекомендуется: {Environment.ProcessorCount} (по числу ядер процессора)");
+            }
+            else
+            {
+                toolTip1.SetToolTip(numThreads, numThreads.Value == Environment.ProcessorCount 
+                    ? "✅ Оптимальное количество потоков" 
+                    : $"Рекомендуется: {Environment.ProcessorCount}");
+            }
+            
+            btnSearch.Enabled = valid && !chkAgentMode.Checked;
             lblStatus.Text = status;
+            
+            // Обновляем цвет статуса
+            lblStatus.ForeColor = valid ? Color.Green : Color.Red;
+        }
+        
+        private bool IsValidBitcoinAddress(string address)
+        {
+            try
+            {
+                // Проверяем основные форматы Bitcoin адресов
+                if (string.IsNullOrWhiteSpace(address)) return false;
+                
+                // Legacy (P2PKH) - начинается с 1
+                if (address.StartsWith("1") && address.Length >= 26 && address.Length <= 35)
+                    return true;
+                
+                // P2SH - начинается с 3
+                if (address.StartsWith("3") && address.Length >= 26 && address.Length <= 35)
+                    return true;
+                
+                // Bech32 (P2WPKH, P2WSH) - начинается с bc1
+                if (address.StartsWith("bc1") && address.Length >= 39 && address.Length <= 62)
+                    return true;
+                
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private void TxtBitcoinAddress_TextChanged_SaveConfig(object? sender, EventArgs e)
@@ -1220,43 +1138,110 @@ namespace BitcoinFinder
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
+            SaveFormConfig();
             SaveProgressFromForm();
         }
 
         private void ChkAgentMode_CheckedChanged(object? sender, EventArgs e)
         {
             bool agentMode = chkAgentMode.Checked;
+            
+            // Включаем/выключаем агентские контролы
             txtAgentIp.Enabled = agentMode;
             txtAgentPort.Enabled = agentMode;
             btnAgentConnect.Enabled = agentMode;
-            // Блокируем обычные элементы поиска
+            
+            // Блокируем обычные элементы поиска в агентском режиме
             txtSeedPhrase.Enabled = !agentMode;
             txtBitcoinAddress.Enabled = !agentMode;
             cmbWordCount.Enabled = !agentMode;
             chkFullSearch.Enabled = !agentMode;
             numThreads.Enabled = !agentMode;
-            btnSearch.Enabled = !agentMode;
+            btnSearch.Enabled = !agentMode && ValidateFields();
             btnStop.Enabled = !agentMode;
             btnSaveProgress.Enabled = !agentMode;
             btnLoadProgress.Enabled = !agentMode;
-        }
-
-        private void BtnAgentConnect_Click(object? sender, EventArgs e)
-        {
-            if (!isAgentConnected)
+            
+            if (agentMode)
             {
-                string ip = txtAgentIp.Text.Trim();
-                int port = int.TryParse(txtAgentPort.Text, out var p) ? p : 5000;
-                agentCts = new CancellationTokenSource();
-                agentTask = Task.Run(() => AgentWorker(ip, port, agentCts.Token));
-                lblAgentStatus.Text = $"Статус: Подключение к {ip}:{port}...";
-                btnAgentConnect.Text = "Отключиться";
+                lblStatus.Text = "Режим агента активен. Подключитесь к серверу для получения заданий.";
+                // Очищаем результаты
+                txtResults.Clear();
+                listBoxCurrentPhrases.Items.Clear();
+                listBoxCurrentPhrases.Items.Add("В режиме агента здесь будут отображаться полученные задания");
             }
             else
             {
+                // Отключаемся от сервера если подключены
+                if (isAgentConnected)
+                {
+                    BtnAgentConnect_Click(null, EventArgs.Empty);
+                }
+                ValidateSearchFields(null, EventArgs.Empty);
+            }
+        }
+        
+        private bool ValidateFields()
+        {
+            return !string.IsNullOrWhiteSpace(txtBitcoinAddress.Text) && 
+                   IsValidBitcoinAddress(txtBitcoinAddress.Text.Trim()) &&
+                   (chkFullSearch.Checked || !string.IsNullOrWhiteSpace(txtSeedPhrase.Text));
+        }
+
+        private async void BtnAgentConnect_Click(object? sender, EventArgs e)
+        {
+            if (!isAgentConnected)
+            {
+                // Валидация параметров подключения
+                string ip = txtAgentIp.Text.Trim();
+                if (string.IsNullOrWhiteSpace(ip))
+                {
+                    MessageBox.Show("Введите IP адрес сервера!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                
+                if (!int.TryParse(txtAgentPort.Text, out int port) || port < 1 || port > 65535)
+                {
+                    MessageBox.Show("Введите корректный номер порта (1-65535)!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                
+                try
+                {
+                    agentCts = new CancellationTokenSource();
+                    agentTask = Task.Run(() => AgentWorker(ip, port, agentCts.Token));
+                    
+                    lblAgentStatus.Text = $"Статус: Подключение к {ip}:{port}...";
+                    lblAgentStatus.ForeColor = Color.Orange;
+                    btnAgentConnect.Text = "Отключиться";
+                    btnAgentConnect.Enabled = true;
+                    
+                    // Ждем некоторое время для установления соединения
+                    await Task.Delay(2000);
+                    
+                    if (!agentCts.Token.IsCancellationRequested && !isAgentConnected)
+                    {
+                        lblAgentStatus.Text = "Статус: Не удалось подключиться к серверу";
+                        lblAgentStatus.ForeColor = Color.Red;
+                        btnAgentConnect.Text = "Подключиться";
+                        agentCts?.Cancel();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка подключения: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    lblAgentStatus.Text = "Статус: Ошибка подключения";
+                    lblAgentStatus.ForeColor = Color.Red;
+                    btnAgentConnect.Text = "Подключиться";
+                }
+            }
+            else
+            {
+                // Отключение
                 agentCts?.Cancel();
                 isAgentConnected = false;
                 lblAgentStatus.Text = "Статус: Отключено";
+                lblAgentStatus.ForeColor = Color.Red;
                 btnAgentConnect.Text = "Подключиться";
             }
         }
@@ -1268,146 +1253,381 @@ namespace BitcoinFinder
                 {
                     using (var client = new System.Net.Sockets.TcpClient())
                     {
-                        client.ReceiveTimeout = 10000;
-                        client.SendTimeout = 10000;
-                        client.Connect(ip, port);
+                        client.ReceiveTimeout = 30000; // 30 секунд
+                        client.SendTimeout = 30000;
+                        
+                        // Подключение с таймаутом
+                        var connectTask = client.ConnectAsync(ip, port);
+                        var timeoutTask = Task.Delay(10000, token); // 10 секунд на подключение
+                        
+                        var completedTask = await Task.WhenAny(connectTask, timeoutTask);
+                        if (completedTask == timeoutTask || !client.Connected)
+                        {
+                            throw new TimeoutException("Таймаут подключения к серверу");
+                        }
+                        
                         isAgentConnected = true;
-                        this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Подключено к {ip}:{port}"));
+                        this.Invoke(new Action(() => {
+                            lblAgentStatus.Text = $"Статус: Подключено к {ip}:{port}";
+                            lblAgentStatus.ForeColor = Color.Green;
+                        }));
+                        
                         using (var stream = client.GetStream())
                         using (var reader = new StreamReader(stream, Encoding.UTF8))
                         using (var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true })
                         {
                             var finder = new AdvancedSeedPhraseFinder();
-                            var agentClient = new DistributedAgentClient();
-                            while (!token.IsCancellationRequested)
+                            
+                            while (!token.IsCancellationRequested && client.Connected)
                             {
-                            // Запросить задание
-                            writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "GET_TASK" }));
-                            string? line = reader.ReadLine();
-                            if (line == null) throw new IOException("Нет ответа от сервера");
-                            var msg = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(line);
-                            if (msg == null || !msg.ContainsKey("command"))
-                            {
-                                this.Invoke(new Action(() => lblAgentStatus.Text = "Статус: Некорректный ответ сервера"));
-                                await Task.Delay(5000, token);
-                                continue;
-                            }
-                            string cmd = msg["command"].ToString();
-                            if (cmd == "NO_TASK")
-                            {
-                                this.Invoke(new Action(() => lblAgentStatus.Text = "Статус: Нет заданий, жду..."));
-                                await Task.Delay(10000, token);
-                                continue;
-                            }
-                            if (cmd == "TASK")
-                            {
-                                int blockId = Convert.ToInt32(msg["blockId"]);
-                                long startIndex = Convert.ToInt64(msg["startIndex"]);
-                                long endIndex = Convert.ToInt64(msg["endIndex"]);
-                                int wordCount = Convert.ToInt32(msg["wordCount"]);
-                                string address = msg.ContainsKey("address") ? msg["address"].ToString() : "";
-                                string seed = msg.ContainsKey("seed") ? msg["seed"].ToString() : "";
-                                this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Работаю над блоком {blockId} ({startIndex}-{endIndex})"));
-
-                                string progressFile = "agent_progress.json";
-                                if (File.Exists(progressFile))
+                                try
                                 {
-                                    try
+                                    // Запросить задание
+                                    var request = new { command = "GET_TASK", agentId = Environment.MachineName };
+                                    await writer.WriteLineAsync(System.Text.Json.JsonSerializer.Serialize(request));
+                                    
+                                    string? line = await reader.ReadLineAsync();
+                                    if (line == null) 
                                     {
-                                        var json = File.ReadAllText(progressFile);
-                                        var prog = JsonSerializer.Deserialize<AgentProgress>(json);
-                                        if (prog != null && prog.blockId == blockId && prog.currentIndex >= startIndex && prog.currentIndex <= endIndex)
-                                        {
-                                            startIndex = prog.currentIndex;
-                                            this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Возобновление блока {blockId} с позиции {startIndex}"));
-                                        }
+                                        this.Invoke(new Action(() => {
+                                            lblAgentStatus.Text = "Статус: Потеряно соединение с сервером";
+                                            lblAgentStatus.ForeColor = Color.Red;
+                                        }));
+                                        break;
                                     }
-                                    catch { }
-                                }
-
-                                int reportInterval = agentClient.ProgressReportInterval; // из конфигурации
-
-                                // Создаём массив возможных слов один раз для всего блока
-                                var possibleWords = new List<string>[wordCount];
-                                for (int w = 0; w < wordCount; w++)
-                                    possibleWords[w] = finder.GetBip39Words();
-
-                                for (long i = startIndex; i <= endIndex && !token.IsCancellationRequested; i++)
-                                {
-                                    // Генерируем seed-фразу по индексу
-                                    // combination рассчитывается на основе заранее подготовленного possibleWords
-                                    var combination = finder.GenerateCombinationByIndex(new System.Numerics.BigInteger(i), possibleWords);
-                                    var seedPhrase = string.Join(" ", combination);
-                                    string wif = null;
-                                    try {
-                                        var mnemonic = new NBitcoin.Mnemonic(seedPhrase, NBitcoin.Wordlist.English);
-                                        var seedBytes = mnemonic.DeriveSeed();
-                                        var masterKey = NBitcoin.ExtKey.CreateFromSeed(seedBytes);
-                                        var fullPath = new NBitcoin.KeyPath("44'/0'/0'/0/0");
-                                        var privateKey = masterKey.Derive(fullPath).PrivateKey;
-                                        wif = privateKey.GetWif(NBitcoin.Network.Main).ToString();
-                                    } catch { wif = null; }
-                                    // Обновляем верхний label приватным ключом
-                                    if (!string.IsNullOrEmpty(wif))
-                                        this.Invoke(new Action(() => lblCurrentPhrase.Text = $"Приватный ключ: {wif}"));
-                                    // Проверяем валидность seed-фразы
-                                    if (finder.IsValidSeedPhrase(seedPhrase))
+                                    
+                                    var msg = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(line);
+                                    if (msg == null || !msg.ContainsKey("command"))
                                     {
-                                        var generatedAddress = finder.GenerateBitcoinAddress(seedPhrase);
-                                        if (!string.IsNullOrEmpty(address) && generatedAddress == address)
-                                        {
-                                            // Сообщить о найденной фразе
-                                            writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "REPORT_FOUND", blockId = blockId, combination = seedPhrase }));
-                                            string? ackFound = reader.ReadLine();
-                                            if (!ResponseIsAck(ackFound))
-                                                throw new IOException("Некорректный ответ на REPORT_FOUND");
-                                            this.Invoke(new Action(() => txtResults.AppendText($"НАЙДЕНО: {seedPhrase}\r\n")));
-                                        }
+                                        this.Invoke(new Action(() => {
+                                            lblAgentStatus.Text = "Статус: Некорректный ответ сервера";
+                                            lblAgentStatus.ForeColor = Color.Orange;
+                                        }));
+                                        await Task.Delay(5000, token);
+                                        continue;
                                     }
-                                    // Отправлять прогресс каждые reportInterval
-                                    if (i % reportInterval == 0)
+                                    
+                                    string cmd = msg["command"].ToString()!;
+                                    
+                                    if (cmd == "NO_TASK")
                                     {
-                                        writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "REPORT_PROGRESS", blockId = blockId, currentIndex = i }));
-                                        string? ack = reader.ReadLine();
-                                        if (!ResponseIsAck(ack))
-                                            throw new IOException("Некорректный ответ на REPORT_PROGRESS");
-                                        try
-                                        {
-                                            var prog = new AgentProgress { blockId = blockId, currentIndex = i };
-                                            File.WriteAllText(progressFile, System.Text.Json.JsonSerializer.Serialize(prog));
-                                        }
-                                        catch { }
+                                        this.Invoke(new Action(() => {
+                                            lblAgentStatus.Text = "Статус: Нет заданий, ожидание...";
+                                            lblAgentStatus.ForeColor = Color.Orange;
+                                            listBoxCurrentPhrases.Items.Clear();
+                                            listBoxCurrentPhrases.Items.Add("Ожидание заданий от сервера...");
+                                        }));
+                                        await Task.Delay(10000, token);
+                                        continue;
+                                    }
+                                    
+                                    if (cmd == "TASK")
+                                    {
+                                        await ProcessAgentTask(msg, finder, writer, reader, token);
+                                    }
+                                    else if (cmd == "SHUTDOWN")
+                                    {
+                                        this.Invoke(new Action(() => {
+                                            lblAgentStatus.Text = "Статус: Сервер запросил отключение";
+                                            lblAgentStatus.ForeColor = Color.Orange;
+                                        }));
+                                        break;
                                     }
                                 }
-                                // После завершения блока — сообщить о завершении
-                                writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "RELEASE_BLOCK", blockId = blockId }));
-                                string? ack2 = reader.ReadLine();
-                                if (!ResponseIsAck(ack2))
-                                    throw new IOException("Некорректный ответ на RELEASE_BLOCK");
-                                try { File.Delete(progressFile); } catch { }
-                                this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Блок {blockId} завершён, жду новое задание..."));
+                                catch (OperationCanceledException)
+                                {
+                                    break;
+                                }
+                                catch (Exception ex)
+                                {
+                                    this.Invoke(new Action(() => {
+                                        lblAgentStatus.Text = $"Статус: Ошибка обработки задания - {ex.Message}";
+                                        lblAgentStatus.ForeColor = Color.Red;
+                                    }));
+                                    await Task.Delay(5000, token);
+                                }
                             }
                         }
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    this.Invoke(new Action(() => {
+                        isAgentConnected = false;
+                        lblAgentStatus.Text = $"Статус: Ошибка соединения - {ex.Message}";
+                        lblAgentStatus.ForeColor = Color.Red;
+                        btnAgentConnect.Text = "Подключиться";
+                    }));
+                    
+                    if (!token.IsCancellationRequested)
+                    {
+                        this.Invoke(new Action(() => {
+                            lblAgentStatus.Text = "Статус: Переподключение через 10 сек...";
+                            lblAgentStatus.ForeColor = Color.Orange;
+                        }));
+                        await Task.Delay(10000, token);
+                    }
+                }
             }
-            catch (Exception ex)
-            {
-                this.Invoke(new Action(() => {
-                    isAgentConnected = false;
-                    lblAgentStatus.Text = $"Ошибка: {ex.Message}";
-                    btnAgentConnect.Text = "Подключиться";
-                }));
-                if (!token.IsCancellationRequested)
-                    await Task.Delay(5000, token);
-
-            }
+            
+            // Финальная очистка при выходе
+            this.Invoke(new Action(() => {
+                isAgentConnected = false;
+                lblAgentStatus.Text = "Статус: Отключено";
+                lblAgentStatus.ForeColor = Color.Red;
+                btnAgentConnect.Text = "Подключиться";
+            }));
         }
+        
+        private async Task ProcessAgentTask(Dictionary<string, object> msg, AdvancedSeedPhraseFinder finder, 
+            StreamWriter writer, StreamReader reader, CancellationToken token)
+        {
+            int blockId = Convert.ToInt32(msg["blockId"]);
+            long startIndex = Convert.ToInt64(msg["startIndex"]);
+            long endIndex = Convert.ToInt64(msg["endIndex"]);
+            int wordCount = Convert.ToInt32(msg["wordCount"]);
+            string address = msg.ContainsKey("address") ? msg["address"].ToString()! : "";
+            string seed = msg.ContainsKey("seed") ? msg["seed"].ToString()! : "";
+            
+            this.Invoke(new Action(() => {
+                lblAgentStatus.Text = $"Статус: Обработка блока {blockId} ({startIndex}-{endIndex})";
+                lblAgentStatus.ForeColor = Color.Blue;
+                listBoxCurrentPhrases.Items.Clear();
+                listBoxCurrentPhrases.Items.Add($"Блок {blockId}: обработка {endIndex - startIndex + 1} комбинаций");
+                listBoxCurrentPhrases.Items.Add($"Диапазон: {startIndex} - {endIndex}");
+                listBoxCurrentPhrases.Items.Add($"Целевой адрес: {address}");
+            }));
+            
+            string progressFile = "agent_progress.json";
+            long currentIndex = startIndex;
+            
+            // Восстановление прогресса
+            if (File.Exists(progressFile))
+            {
+                try
+                {
+                    var json = File.ReadAllText(progressFile);
+                    var prog = JsonSerializer.Deserialize<AgentProgress>(json);
+                    if (prog != null && prog.blockId == blockId && prog.currentIndex >= startIndex && prog.currentIndex <= endIndex)
+                    {
+                        currentIndex = prog.currentIndex;
+                        this.Invoke(new Action(() => {
+                            lblAgentStatus.Text = $"Статус: Возобновление блока {blockId} с позиции {currentIndex}";
+                            listBoxCurrentPhrases.Items.Add($"Восстановлен прогресс с позиции {currentIndex}");
+                        }));
+                    }
+                }
+                catch { }
+            }
+            
+            int reportInterval = 1000; // Отчет каждые 1000 комбинаций
+            long processed = 0;
+            DateTime startTime = DateTime.Now;
+            
+            // Создаём массив возможных слов один раз для всего блока
+            var possibleWords = new List<string>[wordCount];
+            for (int w = 0; w < wordCount; w++)
+                possibleWords[w] = finder.GetBip39Words();
+            
+            for (long i = currentIndex; i <= endIndex && !token.IsCancellationRequested; i++)
+            {
+                try
+                {
+                    // Генерируем seed-фразу по индексу
+                    var combination = finder.GenerateCombinationByIndex(new System.Numerics.BigInteger(i), possibleWords);
+                    var seedPhrase = string.Join(" ", combination);
+                    
+                    // Получаем приватный ключ
+                    string wif = null;
+                    try 
+                    {
+                        var mnemonic = new NBitcoin.Mnemonic(seedPhrase, NBitcoin.Wordlist.English);
+                        var seedBytes = mnemonic.DeriveSeed();
+                        var masterKey = NBitcoin.ExtKey.CreateFromSeed(seedBytes);
+                        var fullPath = new NBitcoin.KeyPath("44'/0'/0'/0/0");
+                        var privateKey = masterKey.Derive(fullPath).PrivateKey;
+                        wif = privateKey.GetWif(NBitcoin.Network.Main).ToString();
+                    } 
+                    catch { wif = null; }
+                    
+                    // Обновляем UI с текущим приватным ключом
+                    if (!string.IsNullOrEmpty(wif))
+                    {
+                        this.Invoke(new Action(() => lblCurrentPhrase.Text = $"Приватный ключ: {wif}"));
+                    }
+                    
+                    // Проверяем валидность seed-фразы
+                    if (finder.IsValidSeedPhrase(seedPhrase))
+                    {
+                        var generatedAddress = finder.GenerateBitcoinAddress(seedPhrase);
+                        if (!string.IsNullOrEmpty(address) && generatedAddress == address)
+                        {
+                            // Найдена совпадающая фраза!
+                            var foundMsg = new { 
+                                command = "REPORT_FOUND", 
+                                blockId = blockId, 
+                                combination = seedPhrase,
+                                privateKey = wif,
+                                address = generatedAddress,
+                                index = i
+                            };
+                            
+                            await writer.WriteLineAsync(System.Text.Json.JsonSerializer.Serialize(foundMsg));
+                            string? ackFound = await reader.ReadLineAsync();
+                            
+                            this.Invoke(new Action(() => {
+                                txtResults.AppendText($"*** НАЙДЕНО СОВПАДЕНИЕ ***\r\n");
+                                txtResults.AppendText($"Seed фраза: {seedPhrase}\r\n");
+                                txtResults.AppendText($"Приватный ключ: {wif}\r\n");
+                                txtResults.AppendText($"Адрес: {generatedAddress}\r\n");
+                                txtResults.AppendText($"Индекс: {i}\r\n");
+                                txtResults.AppendText($"Время: {DateTime.Now}\r\n\r\n");
+                                txtResults.SelectionStart = txtResults.Text.Length;
+                                txtResults.ScrollToCaret();
+                            }));
+                        }
+                    }
+                    
+                    processed++;
+                    
+                    // Отправляем прогресс каждые reportInterval комбинаций
+                    if (processed % reportInterval == 0)
+                    {
+                        var progressMsg = new { 
+                            command = "REPORT_PROGRESS", 
+                            blockId = blockId, 
+                            currentIndex = i,
+                            processed = processed,
+                            rate = processed / (DateTime.Now - startTime).TotalSeconds
+                        };
+                        
+                        await writer.WriteLineAsync(System.Text.Json.JsonSerializer.Serialize(progressMsg));
+                        string? ack = await reader.ReadLineAsync();
+                        
+                        // Сохраняем прогресс локально
+                        try
+                        {
+                            var prog = new AgentProgress { blockId = blockId, currentIndex = i };
+                            File.WriteAllText(progressFile, System.Text.Json.JsonSerializer.Serialize(prog));
+                        }
+                        catch { }
+                        
+                        // Обновляем UI
+                        this.Invoke(new Action(() => {
+                            double rate = processed / (DateTime.Now - startTime).TotalSeconds;
+                            lblSpeed.Text = $"Скорость: {rate:F0}/сек";
+                            lblProgress.Text = $"Обработано: {processed:N0} из {endIndex - startIndex + 1:N0}";
+                            
+                            listBoxCurrentPhrases.Items.Clear();
+                            listBoxCurrentPhrases.Items.Add($"Блок {blockId}: {processed:N0}/{endIndex - startIndex + 1:N0}");
+                            listBoxCurrentPhrases.Items.Add($"Текущий индекс: {i:N0}");
+                            listBoxCurrentPhrases.Items.Add($"Скорость: {rate:F1} комб/сек");
+                            
+                            double percent = (double)(i - startIndex) / (endIndex - startIndex) * 100;
+                            if (progressBar.Maximum >= 100)
+                                progressBar.Value = Math.Min((int)percent, 100);
+                        }));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this.Invoke(new Action(() => {
+                        txtResults.AppendText($"Ошибка обработки индекса {i}: {ex.Message}\r\n");
+                    }));
+                }
+            }
+            
+            // Завершение блока
+            var completeMsg = new { 
+                command = "RELEASE_BLOCK", 
+                blockId = blockId,
+                totalProcessed = processed,
+                completedAt = DateTime.Now
+            };
+            
+            await writer.WriteLineAsync(System.Text.Json.JsonSerializer.Serialize(completeMsg));
+            string? ack2 = await reader.ReadLineAsync();
+            
+            // Удаляем файл прогресса
+            try { File.Delete(progressFile); } catch { }
+            
+            this.Invoke(new Action(() => {
+                lblAgentStatus.Text = $"Статус: Блок {blockId} завершён ({processed:N0} обработано)";
+                lblAgentStatus.ForeColor = Color.Green;
+                listBoxCurrentPhrases.Items.Clear();
+                listBoxCurrentPhrases.Items.Add($"Блок {blockId} завершён успешно");
+                listBoxCurrentPhrases.Items.Add($"Обработано комбинаций: {processed:N0}");
+                listBoxCurrentPhrases.Items.Add("Ожидание нового задания...");
+            }));
         }
 
         private static bool ResponseIsAck(string? resp)
         {
             return !string.IsNullOrWhiteSpace(resp) && resp.Trim().Equals("ACK", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void LoadFormConfig()
+        {
+            try
+            {
+                // Загружаем настройки поиска
+                if (string.IsNullOrWhiteSpace(txtBitcoinAddress.Text))
+                {
+                    txtBitcoinAddress.Text = !string.IsNullOrEmpty(Program.Config.LastSearch.LastBitcoinAddress)
+                        ? Program.Config.LastSearch.LastBitcoinAddress
+                        : Program.Config.DefaultBitcoinAddress;
+                }
+                
+                if (string.IsNullOrWhiteSpace(txtSeedPhrase.Text) && !string.IsNullOrEmpty(Program.Config.LastSearch.LastSeedPhrase))
+                {
+                    txtSeedPhrase.Text = Program.Config.LastSearch.LastSeedPhrase;
+                }
+                
+                numThreads.Value = Program.Config.LastSearch.LastThreadCount > 0 
+                    ? Program.Config.LastSearch.LastThreadCount 
+                    : Program.Config.DefaultThreadCount;
+                
+                chkFullSearch.Checked = Program.Config.LastSearch.LastFullSearch;
+                
+                // Загружаем агентские настройки
+                txtAgentIp.Text = Program.Config.Agent.LastServerIp;
+                txtAgentPort.Text = Program.Config.Agent.LastServerPort.ToString();
+                
+                txtBitcoinAddress.TextChanged += TxtBitcoinAddress_TextChanged_SaveConfig;
+            }
+            catch (Exception ex)
+            {
+                lblStatus.Text = $"Ошибка загрузки конфигурации: {ex.Message}";
+            }
+        }
+        
+        private void SaveFormConfig()
+        {
+            try
+            {
+                // Сохраняем настройки поиска
+                Program.Config.LastSearch.LastSeedPhrase = txtSeedPhrase.Text.Trim();
+                Program.Config.LastSearch.LastBitcoinAddress = txtBitcoinAddress.Text.Trim();
+                Program.Config.LastSearch.LastWordCount = int.TryParse(cmbWordCount.Text, out int wc) ? wc : 12;
+                Program.Config.LastSearch.LastFullSearch = chkFullSearch.Checked;
+                Program.Config.LastSearch.LastThreadCount = (int)numThreads.Value;
+                Program.Config.LastSearch.LastSearchTime = DateTime.Now;
+                
+                // Сохраняем агентские настройки
+                Program.Config.Agent.LastServerIp = txtAgentIp.Text.Trim();
+                if (int.TryParse(txtAgentPort.Text, out int port))
+                    Program.Config.Agent.LastServerPort = port;
+                
+                Program.SaveConfig();
+            }
+            catch (Exception ex)
+            {
+                lblStatus.Text = $"Ошибка сохранения конфигурации: {ex.Message}";
+            }
         }
     }
 
