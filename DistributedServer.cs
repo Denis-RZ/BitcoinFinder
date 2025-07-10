@@ -32,6 +32,18 @@ namespace BitcoinFinder
         private int wordCount = 12;
         private long totalCombinations = 0;
         private long blockSize = 100000;
+        // PUBLIC: Позволяет форме сервера настроить размер блока перед запуском
+        public long BlockSize
+        {
+            get => blockSize;
+            set
+            {
+                if (value > 0)
+                {
+                    blockSize = value;
+                }
+            }
+        }
         private DateTime searchStartTime;
         
         // Статистика

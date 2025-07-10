@@ -78,10 +78,10 @@ namespace BitcoinFinder
                     if (line == null) break;
                     if (string.IsNullOrWhiteSpace(line)) continue;
 
-                    Message msg;
+                    BitcoinFinder.Distributed.Message msg;
                     try
                     {
-                        msg = Message.FromJson(line);
+                        msg = BitcoinFinder.Distributed.Message.FromJson(line);
                     }
                     catch (Exception ex)
                     {
@@ -98,7 +98,7 @@ namespace BitcoinFinder
             }
         }
 
-        private async Task<Message?> ProcessMessageAsync(Message msg, string ip)
+        private async Task<BitcoinFinder.Distributed.Message?> ProcessMessageAsync(BitcoinFinder.Distributed.Message msg, string ip)
         {
             switch (msg.Type)
             {
@@ -112,7 +112,7 @@ namespace BitcoinFinder
                     };
                     ConnectedAgents[msg.AgentId] = agent;
                     Console.WriteLine($"[SERVER] Registered agent {msg.AgentId}");
-                    return new Message
+                    return new BitcoinFinder.Distributed.Message
                     {
                         Type = MessageType.AGENT_REGISTER,
                         AgentId = msg.AgentId,
@@ -127,7 +127,7 @@ namespace BitcoinFinder
                         agent = ConnectedAgents[msg.AgentId];
                         agent.CurrentBlockId = task.BlockId;
                         ConnectedAgents[msg.AgentId] = agent;
-                        return new Message
+                        return new BitcoinFinder.Distributed.Message
                         {
                             Type = MessageType.SERVER_TASK_ASSIGNED,
                             AgentId = msg.AgentId,
@@ -137,7 +137,7 @@ namespace BitcoinFinder
                     }
                     else
                     {
-                        return new Message
+                        return new BitcoinFinder.Distributed.Message
                         {
                             Type = MessageType.SERVER_NO_TASKS,
                             AgentId = msg.AgentId,

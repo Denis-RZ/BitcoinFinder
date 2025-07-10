@@ -1128,32 +1128,73 @@ namespace BitcoinFinder
             txtAgentPort.Enabled = agentMode;
             btnAgentConnect.Enabled = agentMode;
             
-            // Блокируем обычные элементы поиска в агентском режиме
-            txtSeedPhrase.Enabled = !agentMode;
-            txtBitcoinAddress.Enabled = !agentMode;
-            cmbWordCount.Enabled = !agentMode;
-            chkFullSearch.Enabled = !agentMode;
-            numThreads.Enabled = !agentMode;
-            btnSearch.Enabled = !agentMode && ValidateFields();
-            btnStop.Enabled = !agentMode;
-            btnSaveProgress.Enabled = !agentMode;
-            btnLoadProgress.Enabled = !agentMode;
-            
             if (agentMode)
             {
+                // === АГЕНТСКИЙ РЕЖИМ ===
+                // Блокируем редактирование параметров поиска (они придут от сервера)
+                txtSeedPhrase.Enabled = false;
+                txtBitcoinAddress.Enabled = false;
+                cmbWordCount.Enabled = false;
+                chkFullSearch.Enabled = false;
+                numThreads.Enabled = false;
+                
+                // Блокируем кнопки управления поиском
+                btnSearch.Enabled = false;
+                btnStop.Enabled = false;
+                btnSaveProgress.Enabled = false;
+                btnLoadProgress.Enabled = false;
+                
+                // Очищаем и устанавливаем плейсхолдеры для агентского режима
+                txtSeedPhrase.Text = "Будет получено от сервера";
+                txtBitcoinAddress.Text = "Будет получено от сервера";
+                cmbWordCount.SelectedIndex = 0; // "Авто (все варианты)"
+                chkFullSearch.Checked = false;
+                numThreads.Value = 1; // В агентском режиме используется 1 поток
+                
+                // Обновляем статус и результаты
                 lblStatus.Text = "Режим агента активен. Подключитесь к серверу для получения заданий.";
-                // Очищаем результаты
                 txtResults.Clear();
+                txtResults.Text = "=== РЕЖИМ АГЕНТА ===\nПараметры поиска будут получены от сервера.\nПодключитесь к серверу для начала работы.";
+                
                 listBoxCurrentPhrases.Items.Clear();
-                listBoxCurrentPhrases.Items.Add("В режиме агента здесь будут отображаться полученные задания");
+                listBoxCurrentPhrases.Items.Add("Режим агента: ожидание заданий от сервера");
+                listBoxCurrentPhrases.Items.Add("IP сервера: " + txtAgentIp.Text);
+                listBoxCurrentPhrases.Items.Add("Порт: " + txtAgentPort.Text);
+                listBoxCurrentPhrases.Items.Add("Статус: Не подключено");
             }
             else
             {
+                // === АВТОНОМНЫЙ РЕЖИМ ===
+                // Разблокируем все параметры для редактирования
+                txtSeedPhrase.Enabled = true;
+                txtBitcoinAddress.Enabled = true;
+                cmbWordCount.Enabled = true;
+                chkFullSearch.Enabled = true;
+                numThreads.Enabled = true;
+                
+                // Разблокируем кнопки управления
+                btnSaveProgress.Enabled = true;
+                btnLoadProgress.Enabled = true;
+                
                 // Отключаемся от сервера если подключены
                 if (isAgentConnected)
                 {
                     BtnAgentConnect_Click(null, EventArgs.Empty);
                 }
+                
+                // Восстанавливаем значения из конфига
+                LoadFormConfig();
+                
+                // Обновляем интерфейс
+                lblStatus.Text = "Автономный режим. Настройте параметры поиска.";
+                txtResults.Clear();
+                txtResults.Text = "=== АВТОНОМНЫЙ РЕЖИМ ===\nНастройте параметры поиска и нажмите 'Поиск' для начала.";
+                
+                listBoxCurrentPhrases.Items.Clear();
+                listBoxCurrentPhrases.Items.Add("Автономный режим: все параметры настраиваются вручную");
+                listBoxCurrentPhrases.Items.Add("Потоков будет использовано: " + numThreads.Value);
+                
+                // Проверяем валидность полей
                 ValidateSearchFields(null, EventArgs.Empty);
             }
         }
@@ -1527,50 +1568,93 @@ namespace BitcoinFinder
         
         private async Task HandleServerMessage(Dictionary<string, object> message, StreamWriter writer, StreamReader reader, AdvancedSeedPhraseFinder finder, CancellationToken token)
         {
-            try
+            string command = message.ContainsKey("command") ? message["command"].ToString() ?? "" : "";
+            
+            switch (command)
             {
-                string command = message.ContainsKey("command") ? message["command"].ToString()! : "";
-                
-                switch (command)
-                {
-                    case "PING":
-                        await SendAgentMessage(writer, new {
-                            command = "PONG",
-                            agentId = Environment.MachineName,
-                            timestamp = DateTime.Now
-                        });
-                        break;
+                case "TASK_ASSIGNED":
+                case "ENHANCED_TASK":
+                    // Получили задание от сервера - отображаем параметры
+                    this.Invoke(new Action(() => {
+                        // Отображаем параметры задания от сервера
+                        if (message.ContainsKey("targetAddress"))
+                        {
+                            string serverAddress = message["targetAddress"].ToString() ?? "";
+                            txtBitcoinAddress.Text = serverAddress;
+                            lblStatus.Text = $"Получен Bitcoin адрес от сервера: {serverAddress}";
+                        }
                         
-                    case "TASK":
-                        await ProcessEnhancedAgentTask(message, finder, writer, reader, token);
-                        break;
+                        if (message.ContainsKey("wordCount"))
+                        {
+                            int serverWordCount = Convert.ToInt32(message["wordCount"]);
+                            // Устанавливаем количество слов
+                            if (cmbWordCount.Items.Contains(serverWordCount))
+                            {
+                                cmbWordCount.SelectedItem = serverWordCount;
+                            }
+                            else
+                            {
+                                cmbWordCount.SelectedIndex = 0; // "Авто"
+                            }
+                        }
                         
-                    case "CANCEL_TASK":
-                        // Обработка отмены задания
-                        this.Invoke(new Action(() => {
-                            lblAgentStatus.Text = "Статус: Задание отменено сервером";
-                            lblAgentStatus.ForeColor = Color.Orange;
-                        }));
-                        break;
+                        // Обновляем информацию о текущем задании
+                        listBoxCurrentPhrases.Items.Clear();
+                        listBoxCurrentPhrases.Items.Add("=== ЗАДАНИЕ ОТ СЕРВЕРА ===");
+                        listBoxCurrentPhrases.Items.Add($"Bitcoin адрес: {txtBitcoinAddress.Text}");
+                        listBoxCurrentPhrases.Items.Add($"Количество слов: {cmbWordCount.Text}");
+                        if (message.ContainsKey("blockId"))
+                        {
+                            listBoxCurrentPhrases.Items.Add($"ID блока: {message["blockId"]}");
+                        }
+                        if (message.ContainsKey("startIndex") && message.ContainsKey("endIndex"))
+                        {
+                            long start = Convert.ToInt64(message["startIndex"]);
+                            long end = Convert.ToInt64(message["endIndex"]);
+                            listBoxCurrentPhrases.Items.Add($"Диапазон: {start:N0} - {end:N0}");
+                        }
                         
-                    case "SHUTDOWN":
-                        throw new OperationCanceledException("Сервер запросил отключение");
-                        
-                    default:
-                        // Неизвестная команда - логируем но не падаем
-                        this.Invoke(new Action(() => {
-                            txtResults.AppendText($"Неизвестная команда от сервера: {command}\r\n");
-                        }));
-                        break;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"Ошибка обработки сообщения сервера: {ex.Message}", ex);
+                        txtResults.AppendText($"\n[{DateTime.Now:HH:mm:ss}] Получено задание от сервера\n");
+                    }));
+                    
+                    await ProcessEnhancedAgentTask(message, finder, writer, reader, token);
+                    break;
+                    
+                case "NO_TASKS":
+                    this.Invoke(new Action(() => {
+                        lblStatus.Text = "Сервер: нет доступных заданий, ожидание...";
+                        listBoxCurrentPhrases.Items.Clear();
+                        listBoxCurrentPhrases.Items.Add("Режим агента: нет заданий");
+                        listBoxCurrentPhrases.Items.Add("Ожидание новых заданий от сервера...");
+                        txtResults.AppendText($"\n[{DateTime.Now:HH:mm:ss}] Сервер: нет доступных заданий\n");
+                    }));
+                    break;
+                    
+                case "HEARTBEAT_ACK":
+                    // Heartbeat подтвержден, обновляем статус соединения
+                    this.Invoke(new Action(() => {
+                        lblAgentStatus.Text = $"Статус: Подключено (heartbeat OK)";
+                        lblAgentStatus.ForeColor = Color.Green;
+                    }));
+                    break;
+                    
+                case "SERVER_STATUS":
+                    // Получили статус сервера
+                    this.Invoke(new Action(() => {
+                        if (message.ContainsKey("message"))
+                        {
+                            string statusMsg = message["message"].ToString() ?? "";
+                            txtResults.AppendText($"\n[{DateTime.Now:HH:mm:ss}] Сервер: {statusMsg}\n");
+                        }
+                    }));
+                    break;
+                    
+                default:
+                    // Неизвестная команда
+                    this.Invoke(new Action(() => {
+                        txtResults.AppendText($"\n[{DateTime.Now:HH:mm:ss}] Неизвестная команда от сервера: {command}\n");
+                    }));
+                    break;
             }
         }
         
@@ -1845,12 +1929,26 @@ namespace BitcoinFinder
                     : Program.Config.DefaultThreadCount;
                 
                 chkFullSearch.Checked = Program.Config.LastSearch.LastFullSearch;
-                
+
+                // NEW: Устанавливаем выбранное количество слов из конфига
+                var lastWordCount = Program.Config.LastSearch.LastWordCount;
+                if (cmbWordCount.Items.Contains(lastWordCount))
+                {
+                    cmbWordCount.SelectedItem = lastWordCount; // 12,15,18,21,24
+                }
+                else
+                {
+                    cmbWordCount.SelectedIndex = 0; // "Авто (все варианты)"
+                }
+
                 // Загружаем агентские настройки
                 txtAgentIp.Text = Program.Config.Agent.LastServerIp;
                 txtAgentPort.Text = Program.Config.Agent.LastServerPort.ToString();
                 
                 txtBitcoinAddress.TextChanged += TxtBitcoinAddress_TextChanged_SaveConfig;
+
+                // NEW: Обновляем состояние элементов управления
+                ValidateSearchFields(null, EventArgs.Empty);
             }
             catch (Exception ex)
             {

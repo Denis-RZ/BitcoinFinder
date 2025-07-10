@@ -17,6 +17,7 @@ namespace BitcoinFinder
         private TextBox txtPort;
         private TextBox txtBitcoinAddress;
         private NumericUpDown numWordCount;
+        private NumericUpDown numServerThreads;
         private TextBox txtBlockSize;
         private Button btnStartServer;
         private Button btnStopServer;
@@ -33,6 +34,7 @@ namespace BitcoinFinder
             txtPort = new TextBox();
             txtBitcoinAddress = new TextBox();
             numWordCount = new NumericUpDown();
+            numServerThreads = new NumericUpDown();
             txtBlockSize = new TextBox();
             btnStartServer = new Button();
             btnStopServer = new Button();
@@ -80,7 +82,7 @@ namespace BitcoinFinder
             var configLayout = new TableLayoutPanel();
             configLayout.Dock = DockStyle.Fill;
             configLayout.ColumnCount = 2;
-            configLayout.RowCount = 8;
+            configLayout.RowCount = 9; // Увеличиваем на 1 для поля "Потоков сервера"
             configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
@@ -104,6 +106,11 @@ namespace BitcoinFinder
             txtBlockSize = new TextBox { Text = "100000", Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
             configLayout.Controls.Add(txtBlockSize, 1, 3);
 
+            // NEW: Потоков сервера
+            configLayout.Controls.Add(new Label { Text = "Потоков сервера:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 4);
+            numServerThreads = new NumericUpDown { Value = 2, Minimum = 0, Maximum = 16, Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
+            configLayout.Controls.Add(numServerThreads, 1, 4);
+
             // Кнопки управления
             btnStartServer = new Button 
             { 
@@ -114,7 +121,7 @@ namespace BitcoinFinder
                 Dock = DockStyle.Fill
             };
             btnStartServer.Click += BtnStartServer_Click;
-            configLayout.Controls.Add(btnStartServer, 0, 4);
+            configLayout.Controls.Add(btnStartServer, 0, 5);
             configLayout.SetColumnSpan(btnStartServer, 2);
 
             btnStopServer = new Button 
@@ -127,7 +134,7 @@ namespace BitcoinFinder
                 Dock = DockStyle.Fill
             };
             btnStopServer.Click += BtnStopServer_Click;
-            configLayout.Controls.Add(btnStopServer, 0, 5);
+            configLayout.Controls.Add(btnStopServer, 0, 6);
             configLayout.SetColumnSpan(btnStopServer, 2);
 
             // Статус сервера
@@ -139,7 +146,7 @@ namespace BitcoinFinder
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleCenter
             };
-            configLayout.Controls.Add(lblServerStatus, 0, 6);
+            configLayout.Controls.Add(lblServerStatus, 0, 7);
             configLayout.SetColumnSpan(lblServerStatus, 2);
 
             // Статистика
@@ -150,7 +157,7 @@ namespace BitcoinFinder
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleCenter
             };
-            configLayout.Controls.Add(lblStats, 0, 7);
+            configLayout.Controls.Add(lblStats, 0, 8);
             configLayout.SetColumnSpan(lblStats, 2);
 
             configGroup.Controls.Add(configLayout);
@@ -270,12 +277,25 @@ namespace BitcoinFinder
                 }
 
                 int wordCount = (int)numWordCount.Value;
+                // Парсим размер блока
+                long blockSize = Program.Config.Server.BlockSize;
+                if (!long.TryParse(txtBlockSize.Text.Trim(), out blockSize) || blockSize <= 0)
+                {
+                    MessageBox.Show("Введите корректный размер блока (целое положительное число)!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+               
+                // Получаем количество потоков сервера
+                int serverThreads = (int)numServerThreads.Value;
                 
                 // Сохраняем конфигурацию перед запуском
                 SaveServerConfig();
                 
                 // Создаем и запускаем сервер
-                server = new DistributedServer(port);
+                server = new DistributedServer(port)
+                {
+                    BlockSize = blockSize // применяем размер блока
+                };
                 server.OnLog += Server_OnLog;
                 server.OnFoundResult += Server_OnFoundResult;
                 server.OnStatsUpdate += Server_OnStatsUpdate;
@@ -285,7 +305,7 @@ namespace BitcoinFinder
                 {
                     try
                     {
-                        await server.StartAsync(bitcoinAddress, wordCount);
+                        await server.StartAsync(bitcoinAddress, wordCount, null, serverThreads > 0, serverThreads);
                     }
                     catch (Exception ex)
                     {
@@ -308,6 +328,7 @@ namespace BitcoinFinder
                 txtPort.Enabled = false;
                 txtBitcoinAddress.Enabled = false;
                 numWordCount.Enabled = false;
+                numServerThreads.Enabled = false;
                 txtBlockSize.Enabled = false;
 
                 statsTimer.Start();
@@ -315,6 +336,7 @@ namespace BitcoinFinder
                 AddLog($"Сервер запущен на порту {port}");
                 AddLog($"Целевой адрес: {bitcoinAddress}");
                 AddLog($"Количество слов: {wordCount}");
+                AddLog($"Потоков сервера: {serverThreads} (0 = отключено)");
             }
             catch (Exception ex)
             {
@@ -341,6 +363,7 @@ namespace BitcoinFinder
                 txtPort.Enabled = true;
                 txtBitcoinAddress.Enabled = true;
                 numWordCount.Enabled = true;
+                numServerThreads.Enabled = true;
                 txtBlockSize.Enabled = true;
 
                 statsTimer.Stop();
@@ -489,6 +512,10 @@ namespace BitcoinFinder
                     : Program.Config.DefaultBitcoinAddress;
                 numWordCount.Value = Program.Config.Server.LastWordCount;
                 txtBlockSize.Text = Program.Config.Server.BlockSize.ToString();
+               
+                // Загружаем количество потоков сервера (по умолчанию 2)
+                numServerThreads.Value = Program.Config.DefaultThreadCount > 0 ? 
+                    Math.Min(Program.Config.DefaultThreadCount / 2, 16) : 2; // Половина от общего числа потоков
                 
                 AddLog("Конфигурация сервера загружена");
             }
@@ -511,6 +538,9 @@ namespace BitcoinFinder
                 
                 if (long.TryParse(txtBlockSize.Text, out long blockSize))
                     Program.Config.Server.BlockSize = blockSize;
+                
+                // Сохраняем настройку потоков сервера (не добавляем в конфиг, используем только локально)
+                // numServerThreads значение используется только во время сессии
                 
                 Program.SaveConfig();
                 AddLog("Конфигурация сервера сохранена");
