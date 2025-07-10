@@ -1262,23 +1262,25 @@ namespace BitcoinFinder
         }
         private void AgentWorker(string ip, int port, CancellationToken token)
         {
-            try
+            while (!token.IsCancellationRequested)
             {
-                using (var client = new System.Net.Sockets.TcpClient())
+                try
                 {
-                    client.ReceiveTimeout = 10000;
-                    client.SendTimeout = 10000;
-                    client.Connect(ip, port);
-                    isAgentConnected = true;
-                    this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Подключено к {ip}:{port}"));
-                    using (var stream = client.GetStream())
-                    using (var reader = new StreamReader(stream, Encoding.UTF8))
-                    using (var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true })
+                    using (var client = new System.Net.Sockets.TcpClient())
                     {
-                        var finder = new AdvancedSeedPhraseFinder();
-                        var agentClient = new DistributedAgentClient();
-                        while (!token.IsCancellationRequested)
+                        client.ReceiveTimeout = 10000;
+                        client.SendTimeout = 10000;
+                        client.Connect(ip, port);
+                        isAgentConnected = true;
+                        this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Подключено к {ip}:{port}"));
+                        using (var stream = client.GetStream())
+                        using (var reader = new StreamReader(stream, Encoding.UTF8))
+                        using (var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true })
                         {
+                            var finder = new AdvancedSeedPhraseFinder();
+                            var agentClient = new DistributedAgentClient();
+                            while (!token.IsCancellationRequested)
+                            {
                             // Запросить задание
                             writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "GET_TASK" }));
                             string? line = reader.ReadLine();
@@ -1352,6 +1354,8 @@ namespace BitcoinFinder
                                             // Сообщить о найденной фразе
                                             writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "REPORT_FOUND", blockId = blockId, combination = seedPhrase }));
                                             string? ackFound = reader.ReadLine();
+                                            if (!ResponseIsAck(ackFound))
+                                                throw new IOException("Некорректный ответ на REPORT_FOUND");
                                             this.Invoke(new Action(() => txtResults.AppendText($"НАЙДЕНО: {seedPhrase}\r\n")));
                                         }
                                     }
@@ -1360,6 +1364,8 @@ namespace BitcoinFinder
                                     {
                                         writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "REPORT_PROGRESS", blockId = blockId, currentIndex = i }));
                                         string? ack = reader.ReadLine();
+                                        if (!ResponseIsAck(ack))
+                                            throw new IOException("Некорректный ответ на REPORT_PROGRESS");
                                         try
                                         {
                                             var prog = new AgentProgress { blockId = blockId, currentIndex = i };
@@ -1371,6 +1377,8 @@ namespace BitcoinFinder
                                 // После завершения блока — сообщить о завершении
                                 writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { command = "RELEASE_BLOCK", blockId = blockId }));
                                 string? ack2 = reader.ReadLine();
+                                if (!ResponseIsAck(ack2))
+                                    throw new IOException("Некорректный ответ на RELEASE_BLOCK");
                                 try { File.Delete(progressFile); } catch { }
                                 this.Invoke(new Action(() => lblAgentStatus.Text = $"Статус: Блок {blockId} завершён, жду новое задание..."));
                             }
@@ -1385,7 +1393,14 @@ namespace BitcoinFinder
                     lblAgentStatus.Text = $"Ошибка: {ex.Message}";
                     btnAgentConnect.Text = "Подключиться";
                 }));
+                if (!token.IsCancellationRequested)
+                    Thread.Sleep(5000);
             }
+        }
+
+        private static bool ResponseIsAck(string? resp)
+        {
+            return !string.IsNullOrWhiteSpace(resp) && resp.Trim().Equals("ACK", StringComparison.OrdinalIgnoreCase);
         }
     }
 
