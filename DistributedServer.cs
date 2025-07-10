@@ -6,8 +6,11 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
+using NBitcoin; // Для работы с Bitcoin
 
 namespace BitcoinFinder
 {
@@ -21,20 +24,27 @@ namespace BitcoinFinder
         private TcpListener? tcpListener;
         private CancellationTokenSource? serverCts;
         private bool isRunning = false;
-        private int currentBlockId = 1; // Переименовано из nextBlockId
+        private int currentBlockId = 1;
         private readonly object lockObject = new object();
         
         // Параметры поиска
         private string targetAddress = "";
         private int wordCount = 12;
         private long totalCombinations = 0;
-        private long blockSize = 100000; // Размер блока для каждого агента
+        private long blockSize = 100000;
         private DateTime searchStartTime;
         
         // Статистика
         private long totalProcessed = 0;
         private int completedBlocks = 0;
         private readonly ConcurrentDictionary<string, AgentStats> agentStats;
+        
+        // Собственный поиск сервера
+        private bool enableServerSearch = true;
+        private int serverThreads = 2; // Количество потоков для поиска на сервере
+        private long serverProcessedCount = 0;
+        private Task? serverSearchTask;
+        private AdvancedSeedPhraseFinder? serverFinder;
         
         public event Action<string>? OnLog;
         public event Action<string>? OnFoundResult;
@@ -50,13 +60,21 @@ namespace BitcoinFinder
             agentStats = new ConcurrentDictionary<string, AgentStats>();
         }
 
-        public async Task StartAsync(string targetBitcoinAddress, int wordCount, long? totalCombinations = null)
+        public async Task StartAsync(string targetBitcoinAddress, int wordCount, long? totalCombinations = null, bool enableServerSearch = true, int serverThreads = 2)
         {
             if (isRunning) return;
             
             this.targetAddress = targetBitcoinAddress;
             this.wordCount = wordCount;
             this.searchStartTime = DateTime.Now;
+            this.enableServerSearch = enableServerSearch;
+            this.serverThreads = Math.Max(1, Math.Min(serverThreads, Environment.ProcessorCount));
+            
+            // Инициализируем поисковый движок сервера
+            if (this.enableServerSearch)
+            {
+                serverFinder = new AdvancedSeedPhraseFinder();
+            }
             
             // Вычисляем общее количество комбинаций если не задано
             if (totalCombinations.HasValue)
@@ -65,8 +83,9 @@ namespace BitcoinFinder
             }
             else
             {
-                // Для полного перебора: 2048^wordCount
-                this.totalCombinations = (long)Math.Pow(2048, wordCount);
+                var finder = new AdvancedSeedPhraseFinder();
+                var bip39Words = finder.GetBip39Words();
+                this.totalCombinations = (long)Math.Pow(bip39Words.Count, wordCount);
                 if (this.totalCombinations <= 0) // Overflow protection
                     this.totalCombinations = long.MaxValue;
             }
@@ -76,6 +95,7 @@ namespace BitcoinFinder
             Log($"[SERVER] Количество слов: {wordCount}");
             Log($"[SERVER] Всего комбинаций: {this.totalCombinations:N0}");
             Log($"[SERVER] Размер блока: {blockSize:N0}");
+            Log($"[SERVER] Собственный поиск сервера: {(this.enableServerSearch ? $"ВКЛ ({this.serverThreads} потоков)" : "ВЫКЛ")}");
             
             // Генерируем блоки заданий
             GenerateSearchBlocks();
@@ -92,7 +112,17 @@ namespace BitcoinFinder
             var monitorTask = MonitorAgentsAsync(serverCts.Token);
             var statsTask = UpdateStatsAsync(serverCts.Token);
             
-            await Task.WhenAny(acceptTask, monitorTask, statsTask);
+            var allTasks = new List<Task> { acceptTask, monitorTask, statsTask };
+            
+            // Запускаем собственный поиск сервера
+            if (this.enableServerSearch)
+            {
+                serverSearchTask = RunServerSearchAsync(serverCts.Token);
+                allTasks.Add(serverSearchTask);
+                Log($"[SERVER] Запущен собственный поиск с {this.serverThreads} потоками");
+            }
+            
+            await Task.WhenAny(allTasks);
         }
         
         public void Stop()
@@ -125,19 +155,12 @@ namespace BitcoinFinder
             
             long blocksGenerated = 0;
             
-            // Адаптивный размер блока в зависимости от общего объема
-            long adaptiveBlockSize = blockSize;
-            if (totalCombinations > 1_000_000_000) // Более 1 млрд
-            {
-                adaptiveBlockSize = Math.Min(blockSize * 10, 1_000_000); // Увеличиваем размер блока
-            }
-            else if (totalCombinations < 100_000) // Менее 100к
-            {
-                adaptiveBlockSize = Math.Max(blockSize / 10, 1000); // Уменьшаем размер блока
-            }
+            // Улучшенная адаптивная система размеров блоков
+            long adaptiveBlockSize = CalculateOptimalBlockSize();
             
             Log($"[SERVER] Используется размер блока: {adaptiveBlockSize:N0}");
             
+            // Генерируем больше блоков, убираем ограничение в 10000
             for (long startIndex = 0; startIndex < totalCombinations; startIndex += adaptiveBlockSize)
             {
                 long endIndex = Math.Min(startIndex + adaptiveBlockSize - 1, totalCombinations - 1);
@@ -151,22 +174,266 @@ namespace BitcoinFinder
                     TargetAddress = targetAddress,
                     Status = BlockStatus.Pending,
                     CreatedAt = DateTime.Now,
-                    CurrentIndex = startIndex
+                    CurrentIndex = startIndex,
+                    Priority = CalculateBlockPriority(startIndex, endIndex)
                 };
                 
                 pendingBlocks.Enqueue(block);
                 blocksGenerated++;
                 
-                // Ограничиваем количество блоков в памяти для больших задач
-                if (blocksGenerated >= 10000)
+                // Увеличиваем лимит блоков в памяти и добавляем динамическую генерацию
+                if (blocksGenerated >= 50000) // Увеличено с 10000
                 {
-                    Log($"[SERVER] Сгенерировано {blocksGenerated:N0} блоков (ограничение достигнуто)");
+                    Log($"[SERVER] Сгенерировано {blocksGenerated:N0} блоков (предварительная партия)");
                     Log($"[SERVER] Покрыто {endIndex + 1:N0} из {totalCombinations:N0} комбинаций");
                     break;
                 }
             }
             
             Log($"[SERVER] Генерация завершена: {blocksGenerated:N0} блоков, размер блока: {adaptiveBlockSize:N0}");
+        }
+        
+        private long CalculateOptimalBlockSize()
+        {
+            // Базовый размер блока
+            long baseSize = blockSize;
+            
+            // Адаптируем по общему объему задачи
+            if (totalCombinations > 10_000_000_000) // Более 10 млрд
+            {
+                baseSize = Math.Min(blockSize * 50, 5_000_000); // Очень большие блоки
+            }
+            else if (totalCombinations > 1_000_000_000) // Более 1 млрд
+            {
+                baseSize = Math.Min(blockSize * 10, 1_000_000); // Большие блоки
+            }
+            else if (totalCombinations < 100_000) // Менее 100к
+            {
+                baseSize = Math.Max(blockSize / 10, 1000); // Маленькие блоки
+            }
+            else if (totalCombinations < 1_000_000) // Менее 1млн
+            {
+                baseSize = Math.Max(blockSize / 5, 5000); // Небольшие блоки
+            }
+            
+            return baseSize;
+        }
+        
+        private int CalculateBlockPriority(long startIndex, long endIndex)
+        {
+            // Приоритет на основе позиции в поиске (чем раньше, тем выше приоритет)
+            var progress = (double)startIndex / totalCombinations;
+            
+            if (progress < 0.1) return 10; // Высокий приоритет для первых 10%
+            if (progress < 0.3) return 8;  // Высокий для первых 30%
+            if (progress < 0.5) return 6;  // Средний для первых 50%
+            if (progress < 0.8) return 4;  // Низкий для 50-80%
+            return 2; // Очень низкий для последних 20%
+        }
+        
+        private async Task RunServerSearchAsync(CancellationToken token)
+        {
+            Log("[SERVER] Начинаем собственный поиск сервера...");
+            
+            try
+            {
+                var tasks = new List<Task>();
+                
+                // Запускаем потоки поиска
+                for (int threadId = 0; threadId < serverThreads; threadId++)
+                {
+                    int localThreadId = threadId;
+                    var task = Task.Run(async () => await ServerSearchWorkerAsync(localThreadId, token), token);
+                    tasks.Add(task);
+                }
+                
+                await Task.WhenAll(tasks);
+            }
+            catch (OperationCanceledException)
+            {
+                Log("[SERVER] Поиск сервера остановлен");
+            }
+            catch (Exception ex)
+            {
+                Log($"[SERVER] Ошибка в поиске сервера: {ex.Message}");
+            }
+        }
+        
+        private async Task ServerSearchWorkerAsync(int threadId, CancellationToken token)
+        {
+            Log($"[SERVER] Поток сервера {threadId} запущен");
+            
+            var finder = new AdvancedSeedPhraseFinder();
+            var bip39Words = finder.GetBip39Words();
+            
+            while (!token.IsCancellationRequested)
+            {
+                // Получаем блок для обработки
+                SearchBlock? block = GetNextBlockForServer();
+                if (block == null)
+                {
+                    await Task.Delay(5000, token); // Ждем новых блоков
+                    continue;
+                }
+                
+                Log($"[SERVER] Поток {threadId} обрабатывает блок {block.BlockId} ({block.StartIndex}-{block.EndIndex})");
+                
+                try
+                {
+                    await ProcessServerBlockAsync(block, finder, bip39Words, threadId, token);
+                    
+                    // Помечаем блок как завершенный
+                    lock (lockObject)
+                    {
+                        block.Status = BlockStatus.Completed;
+                        block.CompletedAt = DateTime.Now;
+                        block.AssignedTo = $"SERVER_THREAD_{threadId}";
+                        completedBlocks++;
+                    }
+                    
+                    Log($"[SERVER] Поток {threadId} завершил блок {block.BlockId}");
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Log($"[SERVER] Ошибка обработки блока {block.BlockId} в потоке {threadId}: {ex.Message}");
+                    
+                    // Возвращаем блок в очередь при ошибке
+                    lock (lockObject)
+                    {
+                        block.Status = BlockStatus.Pending;
+                        block.AssignedTo = null;
+                        block.AssignedAt = null;
+                    }
+                    pendingBlocks.Enqueue(block);
+                }
+            }
+        }
+        
+        private SearchBlock? GetNextBlockForServer()
+        {
+            lock (lockObject)
+            {
+                if (pendingBlocks.TryDequeue(out SearchBlock? block))
+                {
+                    block.Status = BlockStatus.Assigned;
+                    block.AssignedTo = "SERVER";
+                    block.AssignedAt = DateTime.Now;
+                    assignedBlocks.TryAdd(block.BlockId, block);
+                    return block;
+                }
+            }
+            return null;
+        }
+        
+        private async Task ProcessServerBlockAsync(SearchBlock block, AdvancedSeedPhraseFinder finder, 
+            List<string> bip39Words, int threadId, CancellationToken token)
+        {
+            long processed = 0;
+            var startTime = DateTime.Now;
+            
+            for (long i = block.StartIndex; i <= block.EndIndex && !token.IsCancellationRequested; i++)
+            {
+                try
+                {
+                    // Генерируем seed-фразу по индексу
+                    string seedPhrase = GenerateSeedPhraseByIndex(i, bip39Words, block.WordCount);
+                    
+                    // Проверяем валидность
+                    if (!finder.IsValidSeedPhrase(seedPhrase))
+                        continue;
+                    
+                    // Генерируем адрес и проверяем совпадение
+                    string generatedAddress = finder.GenerateBitcoinAddress(seedPhrase);
+                    if (generatedAddress == block.TargetAddress)
+                    {
+                        // Найдено совпадение!
+                        string? privateKey = null;
+                        try
+                        {
+                            var mnemonic = new Mnemonic(seedPhrase, Wordlist.English);
+                            var seed = mnemonic.DeriveSeed();
+                            var masterKey = ExtKey.CreateFromSeed(seed);
+                            var fullPath = new KeyPath("44'/0'/0'/0/0");
+                            var key = masterKey.Derive(fullPath).PrivateKey;
+                            privateKey = key.GetWif(Network.Main).ToString();
+                        }
+                        catch { }
+                        
+                        var result = $"*** НАЙДЕНО СЕРВЕРОМ! *** Фраза: {seedPhrase}, Ключ: {privateKey}, Адрес: {generatedAddress}, Поток: {threadId}";
+                        foundResults.Add(result);
+                        OnFoundResult?.Invoke(result);
+                        Log($"[SERVER] {result}");
+                        
+                        // Сохраняем результат в файл
+                        await SaveFoundResultAsync(seedPhrase, privateKey, generatedAddress, "SERVER", threadId);
+                    }
+                    
+                    processed++;
+                    Interlocked.Increment(ref serverProcessedCount);
+                    Interlocked.Increment(ref totalProcessed);
+                    
+                    // Обновляем прогресс блока
+                    block.CurrentIndex = i;
+                    block.LastProgressAt = DateTime.Now;
+                    
+                    if (processed % 10000 == 0)
+                    {
+                        var elapsed = DateTime.Now - startTime;
+                        var rate = processed / Math.Max(elapsed.TotalSeconds, 1);
+                        Log($"[SERVER] Поток {threadId}: обработано {processed:N0}, скорость {rate:F0}/сек");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"[SERVER] Ошибка обработки индекса {i} в потоке {threadId}: {ex.Message}");
+                }
+            }
+        }
+        
+        private string GenerateSeedPhraseByIndex(long index, List<string> bip39Words, int wordCount)
+        {
+            var words = new string[wordCount];
+            var tempIndex = index;
+            
+            for (int pos = 0; pos < wordCount; pos++)
+            {
+                words[pos] = bip39Words[(int)(tempIndex % bip39Words.Count)];
+                tempIndex /= bip39Words.Count;
+            }
+            
+            return string.Join(" ", words);
+        }
+        
+        private async Task SaveFoundResultAsync(string seedPhrase, string? privateKey, string address, string foundBy, int threadId)
+        {
+            try
+            {
+                var resultData = new
+                {
+                    Timestamp = DateTime.Now,
+                    SeedPhrase = seedPhrase,
+                    PrivateKey = privateKey,
+                    Address = address,
+                    FoundBy = foundBy,
+                    ThreadId = threadId,
+                    SearchStartTime = searchStartTime,
+                    TotalProcessed = totalProcessed
+                };
+                
+                var json = JsonSerializer.Serialize(resultData, new JsonSerializerOptions { WriteIndented = true });
+                var fileName = $"found_result_{DateTime.Now:yyyyMMdd_HHmmss}_{foundBy}_T{threadId}.json";
+                
+                await File.WriteAllTextAsync(fileName, json);
+                Log($"[SERVER] Результат сохранен в файл: {fileName}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[SERVER] Ошибка сохранения результата: {ex.Message}");
+            }
         }
         
         private async Task AcceptClientsAsync(CancellationToken token)
@@ -222,53 +489,139 @@ namespace BitcoinFinder
                     
                     Log($"[SERVER] Агент {agentId} подключен");
                     
+                    // Ждем приветствие от агента (опционально - для обратной совместимости)
+                    bool isEnhancedAgent = false;
+                    
                     while (!token.IsCancellationRequested && client.Connected && isRunning)
                     {
-                        string? line = await reader.ReadLineAsync();
-                        if (line == null) break;
-                        
-                        agentConnection.LastActivity = DateTime.Now;
-                        
                         try
                         {
-                            var request = JsonSerializer.Deserialize<Dictionary<string, object>>(line);
-                            if (request == null) continue;
+                            // Читаем сообщение от агента с таймаутом
+                            var lineTask = reader.ReadLineAsync();
+                            var timeoutTask = Task.Delay(120000, token); // 2 минуты таймаут
+                            
+                            var completedTask = await Task.WhenAny(lineTask, timeoutTask);
+                            if (completedTask == timeoutTask)
+                            {
+                                Log($"[SERVER] Таймаут ожидания сообщения от {agentId}");
+                                break;
+                            }
+                            
+                            string? line = await lineTask;
+                            if (line == null) break;
+                            
+                            agentConnection.LastActivity = DateTime.Now;
+                            
+                            Dictionary<string, object>? request = null;
+                            try
+                            {
+                                request = JsonSerializer.Deserialize<Dictionary<string, object>>(line);
+                            }
+                            catch (JsonException ex)
+                            {
+                                Log($"[SERVER] Ошибка JSON от {agentId}: {ex.Message}");
+                                await SendErrorResponse(writer, "INVALID_JSON", ex.Message);
+                                continue;
+                            }
+                            
+                            if (request == null || !request.ContainsKey("command"))
+                            {
+                                Log($"[SERVER] Некорректное сообщение от {agentId}: нет команды");
+                                await SendErrorResponse(writer, "MISSING_COMMAND", "Command field is required");
+                                continue;
+                            }
                             
                             string command = request["command"].ToString()!;
                             
-                            switch (command)
+                            // Валидируем команды
+                            if (!IsValidCommand(command))
                             {
-                                case "GET_TASK":
-                                    await HandleGetTaskRequest(agentConnection, writer);
-                                    break;
-                                    
-                                case "REPORT_PROGRESS":
-                                    await HandleProgressReport(request, agentId);
-                                    await writer.WriteLineAsync("ACK");
-                                    break;
-                                    
-                                case "REPORT_FOUND":
-                                    await HandleFoundReport(request, agentId);
-                                    await writer.WriteLineAsync("ACK");
-                                    break;
-                                    
-                                case "RELEASE_BLOCK":
-                                    await HandleBlockRelease(request, agentId);
-                                    await writer.WriteLineAsync("ACK");
-                                    break;
-                                    
-                                default:
-                                    Log($"[SERVER] Неизвестная команда от {agentId}: {command}");
-                                    break;
+                                Log($"[SERVER] Неизвестная команда от {agentId}: {command}");
+                                await SendErrorResponse(writer, "UNKNOWN_COMMAND", $"Unknown command: {command}");
+                                continue;
+                            }
+                            
+                            try
+                            {
+                                switch (command)
+                                {
+                                    case "AGENT_HELLO":
+                                        isEnhancedAgent = await HandleAgentHello(request, agentConnection, writer);
+                                        break;
+                                        
+                                    case "AGENT_GOODBYE":
+                                        await HandleAgentGoodbye(request, agentId, writer);
+                                        Log($"[SERVER] Агент {agentId} попрощался");
+                                        return; // Выходим из цикла
+                                        
+                                    case "HEARTBEAT":
+                                        await HandleHeartbeat(request, agentConnection, writer);
+                                        break;
+                                        
+                                    case "GET_TASK":
+                                        await HandleGetTaskRequest(agentConnection, writer);
+                                        break;
+                                        
+                                    case "TASK_ACCEPTED":
+                                        await HandleTaskAccepted(request, agentId, writer);
+                                        break;
+                                        
+                                    case "TASK_COMPLETED":
+                                        await HandleTaskCompleted(request, agentId, writer);
+                                        break;
+                                        
+                                    case "REPORT_PROGRESS":
+                                        await HandleProgressReport(request, agentId);
+                                        await writer.WriteLineAsync(JsonSerializer.Serialize(new { command = "ACK" }));
+                                        break;
+                                        
+                                    case "REPORT_FOUND":
+                                        await HandleFoundReport(request, agentId);
+                                        await writer.WriteLineAsync(JsonSerializer.Serialize(new { command = "ACK" }));
+                                        break;
+                                        
+                                    case "RELEASE_BLOCK":
+                                        await HandleBlockRelease(request, agentId);
+                                        await writer.WriteLineAsync(JsonSerializer.Serialize(new { command = "ACK" }));
+                                        break;
+                                        
+                                    case "PING":
+                                        await writer.WriteLineAsync(JsonSerializer.Serialize(new { 
+                                            command = "PONG", 
+                                            timestamp = DateTime.Now,
+                                            serverTime = DateTime.Now
+                                        }));
+                                        break;
+                                        
+                                    case "PONG":
+                                        // Ответ на наш PING - просто обновляем активность
+                                        Log($"[SERVER] Получен PONG от {agentId}");
+                                        break;
+                                        
+                                    case "REQUEST_STATUS":
+                                        await HandleStatusRequest(agentConnection, writer);
+                                        break;
+                                        
+                                    default:
+                                        Log($"[SERVER] Неподдерживаемая команда от {agentId}: {command}");
+                                        await SendErrorResponse(writer, "UNSUPPORTED_COMMAND", $"Command {command} is not supported in this version");
+                                        break;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Log($"[SERVER] Ошибка обработки команды {command} от {agentId}: {ex.Message}");
+                                await SendErrorResponse(writer, "PROCESSING_ERROR", ex.Message);
                             }
                         }
-                        catch (JsonException ex)
+                        catch (OperationCanceledException)
                         {
-                            Log($"[SERVER] Ошибка JSON от {agentId}: {ex.Message}");
+                            break;
                         }
                         catch (Exception ex)
                         {
-                            Log($"[SERVER] Ошибка обработки сообщения от {agentId}: {ex.Message}");
+                            Log($"[SERVER] Общая ошибка при обработке {agentId}: {ex.Message}");
+                            await Task.Delay(1000, token); // Пауза перед продолжением
                         }
                     }
                 }
@@ -286,7 +639,8 @@ namespace BitcoinFinder
                     agentConnection.DisconnectedAt = DateTime.Now;
                     
                     // Возвращаем назначенные блоки в очередь
-                    foreach (var kvp in assignedBlocks)
+                    var blocksReturned = 0;
+                    foreach (var kvp in assignedBlocks.ToList())
                     {
                         if (kvp.Value.AssignedTo == agentId)
                         {
@@ -295,45 +649,388 @@ namespace BitcoinFinder
                             kvp.Value.AssignedAt = null;
                             pendingBlocks.Enqueue(kvp.Value);
                             assignedBlocks.TryRemove(kvp.Key, out _);
-                            Log($"[SERVER] Блок {kvp.Key} возвращен в очередь после отключения {agentId}");
+                            blocksReturned++;
                         }
+                    }
+                    
+                    if (blocksReturned > 0)
+                    {
+                        Log($"[SERVER] {blocksReturned} блоков возвращено в очередь после отключения {agentId}");
                     }
                 }
                 
                 connectedAgents.TryRemove(agentId, out _);
+                agentStats.TryRemove(agentId, out _);
                 Log($"[SERVER] Агент {agentId} отключен");
+            }
+        }
+        
+        private bool IsValidCommand(string command)
+        {
+            var validCommands = new HashSet<string>
+            {
+                "AGENT_HELLO", "AGENT_GOODBYE", "HEARTBEAT", "GET_TASK", 
+                "TASK_ACCEPTED", "TASK_COMPLETED", "REPORT_PROGRESS", 
+                "REPORT_FOUND", "RELEASE_BLOCK", "PING", "PONG", "REQUEST_STATUS"
+            };
+            return validCommands.Contains(command);
+        }
+        
+        private async Task SendErrorResponse(StreamWriter writer, string errorCode, string errorMessage)
+        {
+            try
+            {
+                var errorResponse = new
+                {
+                    command = "ERROR",
+                    errorCode = errorCode,
+                    errorMessage = errorMessage,
+                    timestamp = DateTime.Now
+                };
+                await writer.WriteLineAsync(JsonSerializer.Serialize(errorResponse));
+            }
+            catch (Exception ex)
+            {
+                Log($"[SERVER] Ошибка отправки ошибки: {ex.Message}");
+            }
+        }
+        
+        private async Task<bool> HandleAgentHello(Dictionary<string, object> request, AgentConnection agent, StreamWriter writer)
+        {
+            try
+            {
+                string version = request.ContainsKey("version") ? request["version"].ToString()! : "1.0";
+                var capabilities = new List<string>();
+                
+                if (request.ContainsKey("capabilities"))
+                {
+                    var capsElement = (JsonElement)request["capabilities"];
+                    if (capsElement.ValueKind == JsonValueKind.Array)
+                    {
+                        capabilities = capsElement.EnumerateArray()
+                            .Select(e => e.GetString() ?? "")
+                            .Where(s => !string.IsNullOrEmpty(s))
+                            .ToList();
+                    }
+                }
+                
+                // Обновляем информацию об агенте
+                if (request.ContainsKey("agentId"))
+                {
+                    string providedId = request["agentId"].ToString()!;
+                    if (!string.IsNullOrWhiteSpace(providedId))
+                    {
+                        agent.AgentId = providedId;
+                    }
+                }
+                
+                // Отправляем ответ
+                var response = new
+                {
+                    command = "HELLO_ACK",
+                    serverVersion = "2.0",
+                    serverCapabilities = new[] { "DISTRIBUTED_SEARCH", "PROGRESS_TRACKING", "HEARTBEAT", "BLOCK_MANAGEMENT" },
+                    maxBlockSize = blockSize,
+                    supportedWordCounts = new[] { 12, 15, 18, 21, 24 },
+                    timestamp = DateTime.Now
+                };
+                
+                await writer.WriteLineAsync(JsonSerializer.Serialize(response));
+                
+                Log($"[SERVER] Приветствие агента {agent.AgentId} (версия {version}, возможности: {string.Join(", ", capabilities)})");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"[SERVER] Ошибка обработки приветствия: {ex.Message}");
+                await SendErrorResponse(writer, "HELLO_ERROR", ex.Message);
+                return false;
+            }
+        }
+        
+        private async Task HandleAgentGoodbye(Dictionary<string, object> request, string agentId, StreamWriter writer)
+        {
+            try
+            {
+                var response = new
+                {
+                    command = "GOODBYE_ACK",
+                    message = "Goodbye, thank you for your service",
+                    timestamp = DateTime.Now
+                };
+                
+                await writer.WriteLineAsync(JsonSerializer.Serialize(response));
+            }
+            catch (Exception ex)
+            {
+                Log($"[SERVER] Ошибка обработки прощания: {ex.Message}");
+            }
+        }
+        
+        private async Task HandleHeartbeat(Dictionary<string, object> request, AgentConnection agent, StreamWriter writer)
+        {
+            try
+            {
+                string status = request.ContainsKey("status") ? request["status"].ToString()! : "unknown";
+                
+                var response = new
+                {
+                    command = "HEARTBEAT_ACK",
+                    serverStatus = "running",
+                    timestamp = DateTime.Now,
+                    uptime = DateTime.Now - searchStartTime
+                };
+                
+                await writer.WriteLineAsync(JsonSerializer.Serialize(response));
+                
+                // Обновляем статистику активности
+                agent.LastActivity = DateTime.Now;
+            }
+            catch (Exception ex)
+            {
+                Log($"[SERVER] Ошибка обработки heartbeat: {ex.Message}");
+                await SendErrorResponse(writer, "HEARTBEAT_ERROR", ex.Message);
+            }
+        }
+        
+        private async Task HandleTaskAccepted(Dictionary<string, object> request, string agentId, StreamWriter writer)
+        {
+            try
+            {
+                int blockId = Convert.ToInt32(request["blockId"]);
+                
+                if (assignedBlocks.TryGetValue(blockId, out var block) && block.AssignedTo == agentId)
+                {
+                    block.Status = BlockStatus.Assigned; // Подтверждаем назначение
+                    Log($"[SERVER] Агент {agentId} подтвердил принятие блока {blockId}");
+                    
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(new { command = "ACK" }));
+                }
+                else
+                {
+                    Log($"[SERVER] Агент {agentId} пытается подтвердить несуществующий блок {blockId}");
+                    await SendErrorResponse(writer, "INVALID_BLOCK", $"Block {blockId} not found or not assigned to you");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[SERVER] Ошибка подтверждения задания: {ex.Message}");
+                await SendErrorResponse(writer, "TASK_ACCEPTED_ERROR", ex.Message);
+            }
+        }
+        
+        private async Task HandleTaskCompleted(Dictionary<string, object> request, string agentId, StreamWriter writer)
+        {
+            try
+            {
+                int blockId = Convert.ToInt32(request["blockId"]);
+                
+                if (assignedBlocks.TryRemove(blockId, out var block) && block.AssignedTo == agentId)
+                {
+                    block.Status = BlockStatus.Completed;
+                    block.CompletedAt = DateTime.Now;
+                    
+                    // Обновляем статистику
+                    if (agentStats.TryGetValue(agentId, out var stats))
+                    {
+                        stats.CompletedBlocks++;
+                        stats.LastUpdate = DateTime.Now;
+                    }
+                    
+                    Interlocked.Increment(ref completedBlocks);
+                    
+                    Log($"[SERVER] Агент {agentId} завершил блок {blockId}");
+                    
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(new { command = "ACK" }));
+                }
+                else
+                {
+                    Log($"[SERVER] Агент {agentId} пытается завершить несуществующий блок {blockId}");
+                    await SendErrorResponse(writer, "INVALID_BLOCK", $"Block {blockId} not found or not assigned to you");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[SERVER] Ошибка завершения задания: {ex.Message}");
+                await SendErrorResponse(writer, "TASK_COMPLETED_ERROR", ex.Message);
+            }
+        }
+        
+        private async Task HandleStatusRequest(AgentConnection agent, StreamWriter writer)
+        {
+            try
+            {
+                var status = new
+                {
+                    command = "STATUS_RESPONSE",
+                    serverStatus = "running",
+                    connectedAgents = connectedAgents.Count,
+                    pendingBlocks = pendingBlocks.Count,
+                    assignedBlocks = assignedBlocks.Count,
+                    completedBlocks = completedBlocks,
+                    totalProcessed = totalProcessed,
+                    foundResults = foundResults.Count,
+                    uptime = DateTime.Now - searchStartTime,
+                    timestamp = DateTime.Now
+                };
+                
+                await writer.WriteLineAsync(JsonSerializer.Serialize(status));
+            }
+            catch (Exception ex)
+            {
+                Log($"[SERVER] Ошибка получения статуса: {ex.Message}");
+                await SendErrorResponse(writer, "STATUS_ERROR", ex.Message);
             }
         }
         
         private async Task HandleGetTaskRequest(AgentConnection agent, StreamWriter writer)
         {
-            if (pendingBlocks.TryDequeue(out var block))
+            try
             {
-                block.Status = BlockStatus.Assigned;
-                block.AssignedTo = agent.AgentId;
-                block.AssignedAt = DateTime.Now;
+                SearchBlock? block = null;
                 
-                assignedBlocks.TryAdd(block.BlockId, block);
-                
-                var response = new
+                // Пытаемся получить блок с приоритетом
+                lock (lockObject)
                 {
-                    command = "TASK",
-                    blockId = block.BlockId,
-                    startIndex = block.StartIndex,
-                    endIndex = block.EndIndex,
-                    wordCount = block.WordCount,
-                    address = block.TargetAddress,
-                    seed = "" // Для полного перебора
+                    // Ищем блоки с высоким приоритетом сначала
+                    var availableBlocks = pendingBlocks.ToArray().OrderByDescending(b => b.Priority).ToArray();
+                    
+                    if (availableBlocks.Length > 0)
+                    {
+                        block = availableBlocks[0];
+                        
+                        // Удаляем найденный блок из очереди
+                        var tempQueue = new ConcurrentQueue<SearchBlock>();
+                        SearchBlock? tempBlock;
+                        while (pendingBlocks.TryDequeue(out tempBlock))
+                        {
+                            if (tempBlock.BlockId != block.BlockId)
+                                tempQueue.Enqueue(tempBlock);
+                        }
+                        
+                        // Возвращаем все блоки обратно кроме выбранного
+                        while (tempQueue.TryDequeue(out tempBlock))
+                        {
+                            pendingBlocks.Enqueue(tempBlock);
+                        }
+                    }
+                }
+                
+                if (block != null)
+                {
+                    block.Status = BlockStatus.Assigned;
+                    block.AssignedTo = agent.AgentId;
+                    block.AssignedAt = DateTime.Now;
+                    
+                    assignedBlocks.TryAdd(block.BlockId, block);
+                    
+                    var response = new
+                    {
+                        command = "TASK",
+                        blockId = block.BlockId,
+                        startIndex = block.StartIndex,
+                        endIndex = block.EndIndex,
+                        wordCount = block.WordCount,
+                        targetAddress = block.TargetAddress, // Используем targetAddress вместо address
+                        priority = block.Priority,
+                        estimatedCombinations = block.EndIndex - block.StartIndex + 1,
+                        timestamp = DateTime.Now,
+                        serverVersion = "2.0"
+                    };
+                    
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(response));
+                    Log($"[SERVER] Блок {block.BlockId} (приоритет {block.Priority}) назначен агенту {agent.AgentId} ({block.StartIndex:N0}-{block.EndIndex:N0})");
+                }
+                else
+                {
+                    // Генерируем новые блоки если очередь пуста
+                    if (pendingBlocks.IsEmpty && currentBlockId * blockSize < totalCombinations)
+                    {
+                        GenerateMoreBlocks();
+                        
+                        // Пробуем снова после генерации
+                        if (pendingBlocks.TryDequeue(out block))
+                        {
+                            block.Status = BlockStatus.Assigned;
+                            block.AssignedTo = agent.AgentId;
+                            block.AssignedAt = DateTime.Now;
+                            
+                            assignedBlocks.TryAdd(block.BlockId, block);
+                            
+                            var response = new
+                            {
+                                command = "TASK",
+                                blockId = block.BlockId,
+                                startIndex = block.StartIndex,
+                                endIndex = block.EndIndex,
+                                wordCount = block.WordCount,
+                                targetAddress = block.TargetAddress,
+                                priority = block.Priority,
+                                estimatedCombinations = block.EndIndex - block.StartIndex + 1,
+                                timestamp = DateTime.Now,
+                                serverVersion = "2.0"
+                            };
+                            
+                            await writer.WriteLineAsync(JsonSerializer.Serialize(response));
+                            Log($"[SERVER] Новый блок {block.BlockId} назначен агенту {agent.AgentId}");
+                            return;
+                        }
+                    }
+                    
+                    // Нет доступных заданий
+                    var noTaskResponse = new { 
+                        command = "NO_TASK",
+                        reason = "All blocks are assigned or search is complete",
+                        totalBlocks = currentBlockId - 1,
+                        pendingBlocks = pendingBlocks.Count,
+                        assignedBlocks = assignedBlocks.Count,
+                        completedBlocks = completedBlocks,
+                        timestamp = DateTime.Now
+                    };
+                    
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(noTaskResponse));
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[SERVER] Ошибка обработки запроса задания от {agent.AgentId}: {ex.Message}");
+                await SendErrorResponse(writer, "TASK_REQUEST_ERROR", ex.Message);
+            }
+        }
+        
+        private void GenerateMoreBlocks()
+        {
+            Log("[SERVER] Генерация дополнительных блоков...");
+            
+            long adaptiveBlockSize = CalculateOptimalBlockSize();
+            int blocksToGenerate = Math.Min(10000, (int)((totalCombinations - (currentBlockId * blockSize)) / adaptiveBlockSize));
+            
+            if (blocksToGenerate <= 0) return;
+            
+            for (int i = 0; i < blocksToGenerate; i++)
+            {
+                long startIndex = currentBlockId * adaptiveBlockSize;
+                long endIndex = Math.Min(startIndex + adaptiveBlockSize - 1, totalCombinations - 1);
+                
+                if (startIndex >= totalCombinations) break;
+                
+                var block = new SearchBlock
+                {
+                    BlockId = currentBlockId++,
+                    StartIndex = startIndex,
+                    EndIndex = endIndex,
+                    WordCount = wordCount,
+                    TargetAddress = targetAddress,
+                    Status = BlockStatus.Pending,
+                    CreatedAt = DateTime.Now,
+                    CurrentIndex = startIndex,
+                    Priority = CalculateBlockPriority(startIndex, endIndex)
                 };
                 
-                await writer.WriteLineAsync(JsonSerializer.Serialize(response));
-                Log($"[SERVER] Блок {block.BlockId} назначен агенту {agent.AgentId} ({block.StartIndex}-{block.EndIndex})");
+                pendingBlocks.Enqueue(block);
             }
-            else
-            {
-                var response = new { command = "NO_TASK" };
-                await writer.WriteLineAsync(JsonSerializer.Serialize(response));
-            }
+            
+            Log($"[SERVER] Сгенерировано {blocksToGenerate} дополнительных блоков");
         }
         
         private async Task HandleProgressReport(Dictionary<string, object> request, string agentId)
@@ -534,6 +1231,7 @@ namespace BitcoinFinder
         public DateTime? CompletedAt { get; set; }
         public long CurrentIndex { get; set; }
         public DateTime? LastProgressAt { get; set; }
+        public int Priority { get; set; } // Добавляем приоритет
     }
 
     public enum BlockStatus

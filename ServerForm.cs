@@ -249,7 +249,7 @@ namespace BitcoinFinder
             statsTimer.Tick += StatsTimer_Tick;
         }
 
-        private async void BtnStartServer_Click(object sender, EventArgs e)
+        private async void BtnStartServer_Click(object? sender, EventArgs e)
         {
             if (isServerRunning) return;
 
@@ -292,7 +292,7 @@ namespace BitcoinFinder
                         Invoke(new Action(() =>
                         {
                             MessageBox.Show($"Ошибка запуска сервера: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            BtnStopServer_Click(null, EventArgs.Empty);
+                            BtnStopServer_Click(this, EventArgs.Empty);
                         }));
                     }
                 });
@@ -322,7 +322,7 @@ namespace BitcoinFinder
             }
         }
 
-        private void BtnStopServer_Click(object sender, EventArgs e)
+        private void BtnStopServer_Click(object? sender, EventArgs e)
         {
             if (!isServerRunning) return;
 
@@ -398,7 +398,7 @@ namespace BitcoinFinder
             UpdateStatsDisplay(stats);
         }
 
-        private void StatsTimer_Tick(object sender, EventArgs e)
+        private void StatsTimer_Tick(object? sender, EventArgs e)
         {
             if (server != null && isServerRunning)
             {
@@ -422,7 +422,7 @@ namespace BitcoinFinder
                 progressBar.Value = Math.Min((int)percent, 100);
                 
                 // Обновляем label прогресса
-                var progressLabel = progressBar.Parent.Controls.OfType<Label>().FirstOrDefault();
+                var progressLabel = progressBar.Parent?.Controls.OfType<Label>().FirstOrDefault();
                 if (progressLabel != null)
                 {
                     progressLabel.Text = $"{percent:F2}% ({stats.TotalProcessed:N0} / {stats.TotalCombinations:N0})";
@@ -458,7 +458,7 @@ namespace BitcoinFinder
             }
         }
 
-        private void ServerForm_FormClosing(object sender, FormClosingEventArgs e)
+        private void ServerForm_FormClosing(object? sender, FormClosingEventArgs e)
         {
             if (isServerRunning)
             {

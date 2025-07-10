@@ -31,7 +31,7 @@ namespace BitcoinFinder
         // Для сглаживания скорости
         private readonly Queue<(DateTime, BigInteger)> rateHistory = new Queue<(DateTime, BigInteger)>();
         private const int RateHistorySeconds = 10;
-        private double emaSpeed = 0;
+        // private double emaSpeed = 0; // Временно отключено
         private const double alpha = 0.2;
         private const int RateWindowSeconds = 10;
         private const int SpeedWindow = 10;
@@ -358,9 +358,10 @@ namespace BitcoinFinder
             LogMessage($"Всего комбинаций для перебора: {totalCombinations:N0}");
             if (wasProgressRestored)
             {
-                if (totalCombinations != this.totalCombinations)
+                var oldTotalCombinations = this.totalCombinations;
+                if (totalCombinations != oldTotalCombinations)
                 {
-                    LogMessage($"ВНИМАНИЕ: Количество комбинаций изменилось! Было: {this.totalCombinations}, стало: {totalCombinations}");
+                    LogMessage($"ВНИМАНИЕ: Количество комбинаций изменилось! Было: {oldTotalCombinations}, стало: {totalCombinations}");
                     this.totalCombinations = totalCombinations; // Можно обновить, если нужно
                 }
                 LogMessage($"Продолжаем поиск с позиции {currentCombination:N0} из {totalCombinations:N0}");
@@ -462,9 +463,10 @@ namespace BitcoinFinder
 
             if (wasProgressRestored)
             {
-                if (totalCombinations != this.totalCombinations)
+                var oldTotalCombinations = this.totalCombinations;
+                if (totalCombinations != oldTotalCombinations)
                 {
-                    LogMessage($"ВНИМАНИЕ: Количество комбинаций изменилось! Было: {this.totalCombinations}, стало: {totalCombinations}");
+                    LogMessage($"ВНИМАНИЕ: Количество комбинаций изменилось! Было: {oldTotalCombinations}, стало: {totalCombinations}");
                     this.totalCombinations = totalCombinations;
                 }
                 LogMessage($"Продолжаем поиск с позиции {currentCombination:N0} из {totalCombinations:N0}");

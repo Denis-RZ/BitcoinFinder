@@ -207,7 +207,7 @@ namespace BitcoinFinder
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     // Игнорируем ошибки генерации адреса
                 }
