@@ -95,9 +95,6 @@ namespace BitcoinFinder
             chkFullSearch.CheckedChanged += AnySearchParamChanged;
             numThreads.ValueChanged += AnySearchParamChanged;
             
-            // --- Автозагрузка последнего прогресса ---
-            TryAutoLoadLastProgress();
-            
             this.FormClosing += Form1_FormClosing;
             
             // Автосохранение каждую минуту
@@ -912,7 +909,7 @@ namespace BitcoinFinder
             txtBitcoinAddress.ReadOnly = false;
             cmbWordCount.Enabled = true;
             chkFullSearch.Enabled = true;
-            numThreads.Enabled = true;
+            numThreads.Enabled = true;  // ИСПРАВЛЕНО: разблокируем поле потоков
             btnLoadProgress.Enabled = true;
             isProgressLoaded = false;
             loadedProgressData = null;
@@ -921,17 +918,30 @@ namespace BitcoinFinder
         // При изменении любого из параметров — сбрасываем прогресс
         private void AnySearchParamChanged(object? sender, EventArgs e)
         {
+            // Игнорируем события при программной загрузке параметров
             if (suppressParamEvents) return;
+            
+            // Игнорируем события если прогресс НЕ загружен (нет смысла предупреждать)
+            if (!isProgressLoaded) return;
+            
             if (isProgressLoaded)
             {
-                var res = MessageBox.Show("Вы изменили параметры поиска. Прогресс будет сброшен. Продолжить?", "Внимание", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+                // Показываем диалог только когда действительно есть загруженный прогресс
+                var res = MessageBox.Show(
+                    "Вы изменили параметры поиска. Сохранённый прогресс будет сброшен.\n\nПродолжить изменение?", 
+                    "Внимание: сброс прогресса", 
+                    MessageBoxButtons.OKCancel, 
+                    MessageBoxIcon.Warning);
+                
                 if (res == DialogResult.OK)
                 {
+                    // Пользователь согласился - сбрасываем прогресс
                     UnlockSearchFields();
                     lblStatus.Text = "Параметры изменены. Прогресс сброшен.";
                 }
                 else
                 {
+                    // Пользователь отменил - восстанавливаем значения из загруженного прогресса
                     if (loadedProgressData != null)
                     {
                         suppressParamEvents = true;
@@ -1182,8 +1192,8 @@ namespace BitcoinFinder
                     BtnAgentConnect_Click(null, EventArgs.Empty);
                 }
                 
-                // Восстанавливаем значения из конфига
-                LoadFormConfig();
+                // НЕ вызываем LoadFormConfig повторно - параметры уже загружены при запуске
+                // Если нужно восстановить значения по умолчанию, пользователь может использовать кнопки интерфейса
                 
                 // Обновляем интерфейс
                 lblStatus.Text = "Автономный режим. Настройте параметры поиска.";
@@ -1911,26 +1921,29 @@ namespace BitcoinFinder
         {
             try
             {
+                // Используем suppressParamEvents чтобы избежать вызова AnySearchParamChanged при загрузке
+                suppressParamEvents = true;
+                
                 // Загружаем настройки поиска
-                if (string.IsNullOrWhiteSpace(txtBitcoinAddress.Text))
-                {
-                    txtBitcoinAddress.Text = !string.IsNullOrEmpty(Program.Config.LastSearch.LastBitcoinAddress)
-                        ? Program.Config.LastSearch.LastBitcoinAddress
-                        : Program.Config.DefaultBitcoinAddress;
-                }
+                // ПРИНУДИТЕЛЬНАЯ загрузка Bitcoin адреса из конфига
+                txtBitcoinAddress.Text = !string.IsNullOrEmpty(Program.Config.LastSearch.LastBitcoinAddress)
+                    ? Program.Config.LastSearch.LastBitcoinAddress
+                    : Program.Config.DefaultBitcoinAddress;
                 
-                if (string.IsNullOrWhiteSpace(txtSeedPhrase.Text) && !string.IsNullOrEmpty(Program.Config.LastSearch.LastSeedPhrase))
-                {
-                    txtSeedPhrase.Text = Program.Config.LastSearch.LastSeedPhrase;
-                }
+                // ПРИНУДИТЕЛЬНАЯ загрузка последней seed-фразы из конфига
+                txtSeedPhrase.Text = !string.IsNullOrEmpty(Program.Config.LastSearch.LastSeedPhrase)
+                    ? Program.Config.LastSearch.LastSeedPhrase
+                    : "* * * * * * * * * * * *"; // дефолтная 12-словная фраза
                 
+                // ПРИНУДИТЕЛЬНАЯ загрузка количества потоков
                 numThreads.Value = Program.Config.LastSearch.LastThreadCount > 0 
                     ? Program.Config.LastSearch.LastThreadCount 
                     : Program.Config.DefaultThreadCount;
                 
+                // ПРИНУДИТЕЛЬНАЯ загрузка режима полного поиска
                 chkFullSearch.Checked = Program.Config.LastSearch.LastFullSearch;
 
-                // NEW: Устанавливаем выбранное количество слов из конфига
+                // ПРИНУДИТЕЛЬНАЯ загрузка количества слов
                 var lastWordCount = Program.Config.LastSearch.LastWordCount;
                 if (cmbWordCount.Items.Contains(lastWordCount))
                 {
@@ -1945,13 +1958,18 @@ namespace BitcoinFinder
                 txtAgentIp.Text = Program.Config.Agent.LastServerIp;
                 txtAgentPort.Text = Program.Config.Agent.LastServerPort.ToString();
                 
+                // Восстанавливаем обработчик сохранения конфигурации
                 txtBitcoinAddress.TextChanged += TxtBitcoinAddress_TextChanged_SaveConfig;
 
-                // NEW: Обновляем состояние элементов управления
+                // Снимаем блокировку событий
+                suppressParamEvents = false;
+                
+                // Обновляем состояние элементов управления
                 ValidateSearchFields(null, EventArgs.Empty);
             }
             catch (Exception ex)
             {
+                suppressParamEvents = false; // снимаем блокировку даже при ошибке
                 lblStatus.Text = $"Ошибка загрузки конфигурации: {ex.Message}";
             }
         }
