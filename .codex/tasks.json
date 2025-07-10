@@ -1,0 +1,12 @@
+{
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Migrate solution to .NET 8 and introduce Dependency Injection",
+      "labels": ["core", "high-priority", "BitcoinFinder"],
+      "assignee": "mike.bimfm",
+      "description": "Goal: move from .NET Framework 4.x to .NET 8 WinForms (nullable enabled).\n\n### Steps\n1. Edit BitcoinFinder.csproj \u2192 <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>.\n2. Upgrade NuGet packages (NBitcoin \u2265 8.0, etc.).\n3. Replace static singletons with Microsoft.Extensions.DependencyInjection.\n4. Fix all nullable warnings until `dotnet build` is clean.\n5. Ensure AnyCPU & x64 configs run via `dotnet run`.",
+      "status": "open"
+    }
+  ]
+}
