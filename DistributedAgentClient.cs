@@ -18,20 +18,20 @@ namespace BitcoinFinder
         public Action<long>? OnProgress { get; set; }
         public Action<string>? OnFound { get; set; }
 
-        public async Task RunAgentAsync(Func<long, long, Task> searchBlock)
+        public async Task RunAgentAsync(Func<long, long, CancellationToken, Task> searchBlock, CancellationToken cancellationToken)
         {
-            while (true)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
                     using (var client = new TcpClient())
                     {
-                        await client.ConnectAsync(ServerIp, ServerPort);
+                        await client.ConnectAsync(ServerIp, ServerPort, cancellationToken);
                         Log($"[AGENT] Connected to server {ServerIp}:{ServerPort}");
-                        var stream = client.GetStream();
-                        var reader = new StreamReader(stream, Encoding.UTF8);
-                        var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
-                        while (true)
+                        using var stream = client.GetStream();
+                        using var reader = new StreamReader(stream, Encoding.UTF8);
+                        using var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
+                        while (!cancellationToken.IsCancellationRequested)
                         {
                             // Запросить задание
                             await writer.WriteLineAsync(JsonSerializer.Serialize(new { command = "GET_TASK" }));
@@ -41,7 +41,7 @@ namespace BitcoinFinder
                             if (msg == null || msg.command != "TASK")
                             {
                                 Log("[AGENT] Нет задания, жду 10 сек...");
-                                await Task.Delay(10000);
+                                await Task.Delay(10000, cancellationToken);
                                 continue;
                             }
                             Log($"[AGENT] Получен блок {msg.blockId}: {msg.startIndex}-{msg.endIndex}");
@@ -62,17 +62,28 @@ namespace BitcoinFinder
                                 catch { }
                             }
                             // Запуск вашей логики поиска в диапазоне
-                            await searchBlock(lastIndex, msg.endIndex);
+                            await searchBlock(lastIndex, msg.endIndex, cancellationToken);
                             // После завершения блока
                             File.Delete(ProgressFile);
                             Log($"[AGENT] Блок {msg.blockId} завершён");
                         }
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
                 catch (Exception ex)
                 {
                     Log($"[AGENT] Ошибка: {ex.Message}. Переподключение через 10 сек...");
-                    await Task.Delay(10000);
+                    try
+                    {
+                        await Task.Delay(10000, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
                 }
             }
         }
