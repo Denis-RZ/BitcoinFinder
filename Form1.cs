@@ -1326,11 +1326,16 @@ namespace BitcoinFinder
                                 }
 
                                 int reportInterval = agentClient.ProgressReportInterval; // из конфигурации
+
+                                // Создаём массив возможных слов один раз для всего блока
+                                var possibleWords = new List<string>[wordCount];
+                                for (int w = 0; w < wordCount; w++)
+                                    possibleWords[w] = finder.GetBip39Words();
+
                                 for (long i = startIndex; i <= endIndex && !token.IsCancellationRequested; i++)
                                 {
                                     // Генерируем seed-фразу по индексу
-                                    var possibleWords = new List<string>[wordCount];
-                                    for (int w = 0; w < wordCount; w++) possibleWords[w] = finder.GetBip39Words();
+                                    // combination рассчитывается на основе заранее подготовленного possibleWords
                                     var combination = finder.GenerateCombinationByIndex(new System.Numerics.BigInteger(i), possibleWords);
                                     var seedPhrase = string.Join(" ", combination);
                                     string wif = null;
