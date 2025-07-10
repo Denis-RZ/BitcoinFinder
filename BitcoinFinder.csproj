@@ -14,4 +14,8 @@
     <PackageReference Include="NBitcoin" Version="7.0.31" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="DistributedProtocolTests/**/*.cs" />
+  </ItemGroup>
+
 </Project> 
