@@ -20,6 +20,7 @@
     <Compile Include="../DistributedProtocol.cs" Link="DistributedProtocol.cs" />
     <Compile Include="../DistributedCoordinatorServer.cs" Link="DistributedCoordinatorServer.cs" />
     <Compile Include="../DistributedAgentClient.cs" Link="DistributedAgentClient.cs" />
+    <Compile Include="../WebMonitorService.cs" Link="WebMonitorService.cs" />
   </ItemGroup>
 
   <ItemGroup>
