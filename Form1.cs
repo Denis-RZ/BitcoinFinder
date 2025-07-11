@@ -1753,7 +1753,7 @@ namespace BitcoinFinder
                 if (File.Exists(progressFile))
                 {
                     var json = File.ReadAllText(progressFile);
-                    var prog = JsonSerializer.Deserialize<AgentProgress>(json);
+                    var prog = JsonSerializer.Deserialize<DistributedAgentClient.AgentProgress>(json);
                     if (prog != null && prog.blockId == blockId && prog.currentIndex >= startIndex && prog.currentIndex <= endIndex)
                     {
                         currentIndex = prog.currentIndex;
@@ -1876,7 +1876,7 @@ namespace BitcoinFinder
                         // Сохраняем прогресс локально
                         try
                         {
-                            var prog = new AgentProgress { blockId = blockId, currentIndex = i };
+                        var prog = new DistributedAgentClient.AgentProgress { blockId = blockId, currentIndex = i };
                             var progJson = JsonSerializer.Serialize(prog);
                             await File.WriteAllTextAsync(progressFile, progJson);
                         }
@@ -2000,44 +2000,4 @@ namespace BitcoinFinder
         }
     }
 
-    public class SearchParameters
-    {
-        public string SeedPhrase { get; set; } = "";
-        public string BitcoinAddress { get; set; } = "";
-        public int WordCount { get; set; } = 12;
-        public bool FullSearch { get; set; } = false;
-        public int ThreadCount { get; set; } = 1;
-        public string? ProgressFile { get; set; } = null;
-    }
-
-    public class ProgressData
-    {
-        public string SeedPhrase { get; set; } = "";
-        public string BitcoinAddress { get; set; } = "";
-        public int WordCount { get; set; } = 12;
-        public bool FullSearch { get; set; } = false;
-        public int ThreadCount { get; set; } = 1;
-        public DateTime Timestamp { get; set; }
-        public string CurrentCombination { get; set; } = "0";
-        public string TotalCombinations { get; set; } = "0";
-        public string LastCheckedPhrase { get; set; } = "";
-    }
-
-    public class ProgressInfo
-    {
-        public BigInteger Current { get; set; }
-        public BigInteger Total { get; set; }
-        public double Percentage { get; set; }
-        public string Status { get; set; } = "";
-        public double Rate { get; set; }
-        public TimeSpan Remaining { get; set; }
-        public List<string> CurrentPhrases { get; set; } = new List<string>();
-        public string? CurrentPrivateKey { get; set; } // новый параметр
-    }
-
-    public class AgentProgress
-    {
-        public int blockId { get; set; }
-        public long currentIndex { get; set; }
-    }
 }
