@@ -608,7 +608,7 @@ namespace BitcoinFinder
                             Percentage = totalCombinations > 0 ? (double)(currentCombination * 100 / totalCombinations) : 0,
                             Status = $"Проверено: {currentCombination:N0} / {totalCombinations:N0} | Скорость: {rateStr}/сек | Текущая: {currentSeedPhrase}",
                             Rate = rate,
-                            Remaining = rate > 0 ? (long)remaining.TotalSeconds : 0
+                            Remaining = rate > 0 ? remaining : TimeSpan.Zero
                         };
                         
                         worker.ReportProgress(Math.Min(progress, 99), progressInfo);
@@ -797,8 +797,10 @@ namespace BitcoinFinder
                             Percentage = totalCombinations > 0 ? (double)((double)currentCombination * 100 / (double)totalCombinations) : 0,
                             Status = $"Проверено: {currentCombination:N0} / {totalCombinations:N0} | Скорость: {speedStr}/сек | Текущая: {currentSeedPhrase}",
                             Rate = displaySpeed,
-                            Remaining = displaySpeed > 0 ? (long)(totalCombinations - currentCombination) : 0,
-                            CurrentPhrases = string.Join(" ", currentPhrasesList), // только seed-фразы
+                            Remaining = displaySpeed > 0 ?
+                                TimeSpan.FromSeconds((double)(totalCombinations - currentCombination) / displaySpeed)
+                                : TimeSpan.Zero,
+                            CurrentPhrases = currentPhrasesList,
                             CurrentPrivateKey = wif // приватный ключ для верхней строки
                         };
                         

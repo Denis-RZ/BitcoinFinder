@@ -14,6 +14,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <PackageReference Include="NBitcoin" Version="7.0.31" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +22,9 @@
     <Compile Include="../DistributedCoordinatorServer.cs" Link="DistributedCoordinatorServer.cs" />
     <Compile Include="../DistributedAgentClient.cs" Link="DistributedAgentClient.cs" />
     <Compile Include="../WebMonitorService.cs" Link="WebMonitorService.cs" />
+    <Compile Include="../AdvancedSeedPhraseFinder.cs" Link="AdvancedSeedPhraseFinder.cs" />
+    <Compile Include="../SearchResult.cs" Link="SearchResult.cs" />
+    <Compile Include="../ProgressInfo.cs" Link="ProgressInfo.cs" />
   </ItemGroup>
 
   <ItemGroup>
