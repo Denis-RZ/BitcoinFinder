@@ -22,7 +22,7 @@ namespace BitcoinFinder
 
     public class AgentController : IDisposable
     {
-        private readonly Form1 parentForm;
+        private readonly Form parentForm;
         private readonly DistributedAgentClient agentClient;
         private readonly AdvancedSeedPhraseFinder finder;
         private CancellationTokenSource? cancellationSource;
@@ -37,7 +37,7 @@ namespace BitcoinFinder
         public event Action<AgentTaskInfo>? OnTaskReceived;
         public event Action<long, double>? OnProgressUpdate;
 
-        public AgentController(Form1 form)
+        public AgentController(Form form)
         {
             parentForm = form;
             agentClient = new DistributedAgentClient();
@@ -50,7 +50,7 @@ namespace BitcoinFinder
             agentClient.OnStateChanged += HandleStateChanged;
         }
 
-        public async Task<bool> ConnectAsync(string serverIp, int port)
+        public async Task<bool> ConnectAsync(string serverIp, int port, string agentName = "", int threads = 1)
         {
             try
             {
@@ -61,6 +61,14 @@ namespace BitcoinFinder
                 await DisconnectAsync();
                 
                 cancellationSource = new CancellationTokenSource();
+                
+                // Загружаем сохраненный прогресс
+                var savedProgress = agentClient.LoadProgress();
+                if (savedProgress != null)
+                {
+                    LogMessage($"Найден сохраненный прогресс: блок {savedProgress.LastBlockId}, позиция {savedProgress.LastIndex:N0}");
+                    LogMessage("Агент будет запрашивать продолжение с этой позиции");
+                }
                 
                 // Подключаемся к серверу
                 bool connected = await agentClient.ConnectToServer(serverIp, port, cancellationSource.Token);
@@ -73,8 +81,12 @@ namespace BitcoinFinder
 
                 SetState(AgentState.Connected);
 
-                // Регистрируемся как агент
-                currentAgentId = Environment.MachineName + "_" + DateTime.Now.ToString("HHmmss");
+                // Устанавливаем параметры агента
+                agentClient.AgentName = string.IsNullOrEmpty(agentName) ? Environment.MachineName : agentName;
+                agentClient.Threads = threads;
+                
+                // Регистрируемся как агент с параметрами
+                currentAgentId = agentClient.AgentName + "_" + DateTime.Now.ToString("HHmmss");
                 bool registered = await agentClient.RegisterAgent(currentAgentId, cancellationSource.Token);
                 
                 if (!registered)
@@ -177,11 +189,12 @@ namespace BitcoinFinder
         {
             try
             {
-                var heartbeat = new ProtoMessage
+                var heartbeat = new
                 {
-                    Type = MessageType.AGENT_REPORT_PROGRESS,
-                    AgentId = currentAgentId,
-                    Timestamp = DateTime.UtcNow
+                    command = "HEARTBEAT",
+                    agentId = currentAgentId,
+                    status = "working",
+                    timestamp = DateTime.Now
                 };
                 
                 await agentClient.SendMessage(heartbeat);
@@ -198,12 +211,13 @@ namespace BitcoinFinder
             {
                 if (State != AgentState.Registered && State != AgentState.Working) return;
 
+                LogMessage($"Запрашиваю задание у сервера...");
                 // Запрашиваем задание
                 var task = await agentClient.RequestTask(currentAgentId, token);
                 if (task != null)
                 {
                     SetState(AgentState.Working);
-                    
+                    LogMessage($"Получено задание: блок {task.BlockId} ({task.StartIndex}-{task.EndIndex})");
                     var taskInfo = new AgentTaskInfo
                     {
                         BlockId = task.BlockId,
@@ -214,14 +228,22 @@ namespace BitcoinFinder
 
                     OnTaskReceived?.Invoke(taskInfo);
 
+                    LogMessage($"Начинаю обработку блока {task.BlockId}");
                     // Обрабатываем задание
                     bool success = await agentClient.ProcessTaskWithProgress(task, "1MCirzugBCrn5H6jHix6PJSLX7EqUEniBQ", token);
-                    
                     if (success)
                     {
                         SetState(AgentState.Registered); // Возвращаемся в состояние ожидания
                         LogMessage($"Блок {task.BlockId} обработан успешно");
                     }
+                    else
+                    {
+                        LogMessage($"Ошибка при обработке блока {task.BlockId}");
+                    }
+                }
+                else
+                {
+                    LogMessage($"Нет доступных заданий на сервере");
                 }
             }
             catch (OperationCanceledException)
@@ -253,9 +275,9 @@ namespace BitcoinFinder
             OnLog?.Invoke($"[{DateTime.Now:HH:mm:ss}] {message}");
         }
 
-        private void UpdateProgress(long current)
+        private void UpdateProgress(long current, double rate)
         {
-            OnProgressUpdate?.Invoke(current, 0); // TODO: вычислить скорость
+            OnProgressUpdate?.Invoke(current, rate);
         }
 
         private void HandleFoundResult(string result)

@@ -6,6 +6,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using BitcoinFinder.Distributed;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 using ProtoMessage = BitcoinFinder.Distributed.Message;
 using ProtoBlockTask = BitcoinFinder.Distributed.BlockTask;
@@ -29,84 +31,117 @@ namespace BitcoinFinder
         public int ProgressReportInterval { get; set; } = 10000;
         public string ProgressFile { get; set; } = "agent_progress.json";
         public Action<string>? OnLog { get; set; }
-        public Action<long>? OnProgress { get; set; }
+        public Action<long, double>? OnProgress { get; set; }
         public Action<string>? OnFound { get; set; }
         public Action<AgentState>? OnStateChanged { get; set; }
         
         public AgentState State { get; private set; } = AgentState.Disconnected;
+        public string AgentName { get; set; } = Environment.MachineName;
+        public int Threads { get; set; } = 1;
 
         private TcpClient? _client;
         private StreamReader? _reader;
         private StreamWriter? _writer;
+        private string currentAgentId = "";
+        private bool _preventSleep = false;
 
-        public async Task RunAgentAsync(Func<long, long, CancellationToken, Task> searchBlock, CancellationToken cancellationToken)
+        // Windows API для предотвращения сна
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern EXECUTION_STATE SetThreadExecutionState(EXECUTION_STATE esFlags);
+
+        [Flags]
+        private enum EXECUTION_STATE : uint
         {
-            while (!cancellationToken.IsCancellationRequested)
+            ES_AWAYMODE_REQUIRED = 0x00000040,
+            ES_CONTINUOUS = 0x80000000,
+            ES_DISPLAY_REQUIRED = 0x00000002,
+            ES_SYSTEM_REQUIRED = 0x00000001
+        }
+
+        public void PreventSleep()
+        {
+            if (!_preventSleep)
             {
-                try
+                SetThreadExecutionState(EXECUTION_STATE.ES_CONTINUOUS | EXECUTION_STATE.ES_SYSTEM_REQUIRED | EXECUTION_STATE.ES_DISPLAY_REQUIRED);
+                _preventSleep = true;
+                Log("[AGENT] Предотвращение сна компьютера включено");
+            }
+        }
+
+        public void AllowSleep()
+        {
+            if (_preventSleep)
+            {
+                SetThreadExecutionState(EXECUTION_STATE.ES_CONTINUOUS);
+                _preventSleep = false;
+                Log("[AGENT] Предотвращение сна компьютера отключено");
+            }
+        }
+
+        // Класс для сохранения прогресса агента
+        public class AgentProgress
+        {
+            public string AgentName { get; set; } = "";
+            public string ServerIp { get; set; } = "";
+            public int ServerPort { get; set; } = 5000;
+            public int Threads { get; set; } = 1;
+            public int LastBlockId { get; set; } = -1;
+            public long LastIndex { get; set; } = 0;
+            public DateTime LastUpdate { get; set; } = DateTime.Now;
+        }
+
+        public void SaveProgress(int blockId, long currentIndex)
+        {
+            try
+            {
+                var progress = new AgentProgress
                 {
-                    using (var client = new TcpClient())
-                    {
-                        await client.ConnectAsync(ServerIp, ServerPort, cancellationToken);
-                        Log($"[AGENT] Connected to server {ServerIp}:{ServerPort}");
-                        using var stream = client.GetStream();
-                        using var reader = new StreamReader(stream, Encoding.UTF8);
-                        using var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
-                        while (!cancellationToken.IsCancellationRequested)
-                        {
-                            // Запросить задание
-                            await writer.WriteLineAsync(JsonSerializer.Serialize(new { command = "GET_TASK" }));
-                            var line = await reader.ReadLineAsync();
-                            if (line == null) break;
-                            var msg = JsonSerializer.Deserialize<BlockTask>(line);
-                            if (msg == null || msg.command != "TASK")
-                            {
-                                Log("[AGENT] Нет задания, жду 10 сек...");
-                                await Task.Delay(10000, cancellationToken);
-                                continue;
-                            }
-                            Log($"[AGENT] Получен блок {msg.blockId}: {msg.startIndex}-{msg.endIndex}");
-                            long lastIndex = msg.startIndex;
-                            // Восстановить прогресс, если есть
-                            if (File.Exists(ProgressFile))
-                            {
-                                try
-                                {
-                                    var json = File.ReadAllText(ProgressFile);
-                                    var prog = JsonSerializer.Deserialize<AgentProgress>(json);
-                                    if (prog != null && prog.blockId == msg.blockId)
-                                    {
-                                        lastIndex = prog.currentIndex;
-                                        Log($"[AGENT] Восстановлен прогресс: {lastIndex}");
-                                    }
-                                }
-                                catch { }
-                            }
-                            // Запуск вашей логики поиска в диапазоне
-                            await searchBlock(lastIndex, msg.endIndex, cancellationToken);
-                            // После завершения блока
-                            File.Delete(ProgressFile);
-                            Log($"[AGENT] Блок {msg.blockId} завершён");
-                        }
-                    }
-                }
-                catch (OperationCanceledException)
+                    AgentName = AgentName,
+                    ServerIp = ServerIp,
+                    ServerPort = ServerPort,
+                    Threads = Threads,
+                    LastBlockId = blockId,
+                    LastIndex = currentIndex,
+                    LastUpdate = DateTime.Now
+                };
+
+                var json = JsonSerializer.Serialize(progress, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText("agent_config.json", json);
+                Log($"[AGENT] Прогресс сохранен: блок {blockId}, индекс {currentIndex:N0}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[AGENT] Ошибка сохранения прогресса: {ex.Message}");
+            }
+        }
+
+        public AgentProgress? LoadProgress()
+        {
+            try
+            {
+                if (File.Exists("agent_config.json"))
                 {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    Log($"[AGENT] Ошибка: {ex.Message}. Переподключение через 10 сек...");
-                    try
+                    var json = File.ReadAllText("agent_config.json");
+                    var progress = JsonSerializer.Deserialize<AgentProgress>(json);
+                    if (progress != null)
                     {
-                        await Task.Delay(10000, cancellationToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
+                        Log($"[AGENT] Загружен прогресс: блок {progress.LastBlockId}, индекс {progress.LastIndex:N0}");
+                        return progress;
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                Log($"[AGENT] Ошибка загрузки прогресса: {ex.Message}");
+            }
+            return null;
+        }
+
+        public async Task RunAgentAsync(Func<long, long, CancellationToken, Task> searchBlock, CancellationToken cancellationToken)
+        {
+            // УДАЛЯЕМ СТАРЫЙ ПРОТОКОЛ - он несовместим с сервером
+            // Оставляем только новый протокол через RequestTask/ReceiveTask
+            Log("[AGENT] Старый протокол отключен, используйте новый протокол через AgentController");
         }
 
         public async Task ReportProgressAsync(StreamWriter writer, int blockId, long currentIndex)
@@ -160,7 +195,7 @@ namespace BitcoinFinder
             }
         }
 
-        public async Task<bool> SendMessage(ProtoMessage message)
+        public async Task<bool> SendMessage(object message)
         {
             if (_writer == null)
             {
@@ -169,7 +204,7 @@ namespace BitcoinFinder
             }
             try
             {
-                await _writer.WriteLineAsync(message.ToJson());
+                await _writer.WriteLineAsync(JsonSerializer.Serialize(message));
                 return true;
             }
             catch (Exception ex)
@@ -179,7 +214,7 @@ namespace BitcoinFinder
             }
         }
 
-        public async Task<ProtoMessage?> ReceiveMessage(CancellationToken token = default)
+        public async Task<Dictionary<string, object>?> ReceiveMessage(CancellationToken token = default)
         {
             if (_reader == null)
             {
@@ -190,7 +225,7 @@ namespace BitcoinFinder
             {
                 var line = await _reader.ReadLineAsync();
                 if (line == null) return null;
-                return ProtoMessage.FromJson(line);
+                return JsonSerializer.Deserialize<Dictionary<string, object>>(line);
             }
             catch (Exception ex)
             {
@@ -199,48 +234,62 @@ namespace BitcoinFinder
             }
         }
 
-        public Task<bool> SendRegisterMessage(string agentId)
+        public async Task<bool> SendRegisterMessage(string agentId)
         {
-            var msg = new ProtoMessage
+            var msg = new
             {
-                Type = MessageType.AGENT_REGISTER,
-                AgentId = agentId,
-                Timestamp = DateTime.UtcNow
+                command = "HELLO",
+                agentId = agentId,
+                version = "2.0",
+                capabilities = new[] { "DISTRIBUTED_SEARCH", "PROGRESS_TRACKING", "HEARTBEAT" },
+                agentName = AgentName,
+                threads = Threads,
+                timestamp = DateTime.Now
             };
-            return SendMessage(msg);
-        }
-
-        public Task<bool> RequestTask(string agentId)
-        {
-            var msg = new ProtoMessage
-            {
-                Type = MessageType.AGENT_REQUEST_TASK,
-                AgentId = agentId,
-                Timestamp = DateTime.UtcNow
-            };
-            return SendMessage(msg);
+            return await SendMessage(msg);
         }
 
         public async Task<ProtoBlockTask?> ReceiveTask(CancellationToken token = default)
         {
-            var resp = await ReceiveMessage(token);
-            if (resp == null) return null;
-            if (resp.Type == MessageType.SERVER_TASK_ASSIGNED && resp.Data != null)
+            var response = await ReceiveMessage(token);
+            if (response == null) return null;
+            
+            try
             {
-                try
+                if (response.ContainsKey("command"))
                 {
-                    return resp.Data.Value.Deserialize<ProtoBlockTask>();
-                }
-                catch (Exception ex)
-                {
-                    Log($"[AGENT] Failed to parse task: {ex.Message}");
-                    return null;
+                    string command = response["command"].ToString()!;
+                    if (command == "TASK")
+                    {
+                        // Преобразуем ответ сервера в BlockTask
+                        var task = new ProtoBlockTask
+                        {
+                            BlockId = Convert.ToInt32(response["blockId"]),
+                            StartIndex = Convert.ToInt64(response["startIndex"]),
+                            EndIndex = Convert.ToInt64(response["endIndex"]),
+                            SearchParams = new SearchParameters
+                            {
+                                WordCount = Convert.ToInt32(response["wordCount"]),
+                                BitcoinAddress = response["targetAddress"].ToString() ?? ""
+                            },
+                            Status = "Assigned"
+                        };
+                        
+                        SetState(AgentState.Working);
+                        Log($"Получено задание: блок {task.BlockId} ({task.StartIndex}-{task.EndIndex})");
+                        return task;
+                    }
+                    else if (command == "NO_TASK")
+                    {
+                        Log("Нет доступных заданий");
+                    }
                 }
             }
-            if (resp.Type == MessageType.SERVER_NO_TASKS)
+            catch (Exception ex)
             {
-                Log("[AGENT] No tasks available");
+                Log($"[AGENT] Failed to parse task: {ex.Message}");
             }
+            
             return null;
         }
 
@@ -250,8 +299,8 @@ namespace BitcoinFinder
             long current = task.StartIndex;
             while (current <= task.EndIndex && !token.IsCancellationRequested)
             {
-                OnProgress?.Invoke(current);
-                await Task.Delay(10, token); // simulate work
+                OnProgress?.Invoke(current, 0); // simulate work
+                await Task.Delay(10, token);
                 current++;
             }
             Log($"[AGENT] Completed block {task.BlockId}");
@@ -263,34 +312,36 @@ namespace BitcoinFinder
 
             try
             {
-                var registerMessage = new ProtoMessage
+                currentAgentId = agentId; // Сохраняем ID агента
+                
+                // Отправляем приветственное сообщение в формате, который ожидает сервер
+                var helloMessage = new
                 {
-                    Type = MessageType.AGENT_REGISTER,
-                    AgentId = agentId,
-                    Data = JsonSerializer.SerializeToElement(new
-                    {
-                        version = "2.0",
-                        capabilities = new[] { "SEARCH", "PROGRESS_REPORT", "HEARTBEAT" },
-                        machineName = Environment.MachineName,
-                        processorCount = Environment.ProcessorCount
-                    }),
-                    Timestamp = DateTime.UtcNow
+                    command = "AGENT_HELLO",
+                    agentId = agentId,
+                    version = "2.0",
+                    capabilities = new[] { "DISTRIBUTED_SEARCH", "PROGRESS_TRACKING", "HEARTBEAT" },
+                    agentName = AgentName,
+                    threads = Threads,
+                    timestamp = DateTime.Now
                 };
 
-                await SendMessage(registerMessage);
+                await SendMessage(helloMessage);
                 var response = await ReceiveMessage(token);
 
-                if (response?.Type == MessageType.AGENT_REGISTER)
+                if (response != null && response.ContainsKey("command"))
                 {
-                    SetState(AgentState.Registered);
-                    Log($"Агент {agentId} зарегистрирован успешно");
-                    return true;
+                    string command = response["command"].ToString()!;
+                    if (command == "HELLO_ACK")
+                    {
+                        SetState(AgentState.Registered);
+                        Log($"Агент {agentId} зарегистрирован успешно");
+                        return true;
+                    }
                 }
-                else
-                {
-                    Log($"Сервер отклонил регистрацию агента: {response?.Type}");
-                    return false;
-                }
+                
+                Log($"Сервер отклонил регистрацию агента: {(response?.ContainsKey("command") == true ? response["command"].ToString() : "Unknown")}");
+                return false;
             }
             catch (Exception ex)
             {
@@ -306,29 +357,44 @@ namespace BitcoinFinder
 
             try
             {
-                var requestMessage = new ProtoMessage
+                // Отправляем запрос задания в формате, который ожидает сервер
+                var requestMessage = new
                 {
-                    Type = MessageType.AGENT_REQUEST_TASK,
-                    AgentId = agentId,
-                    Timestamp = DateTime.UtcNow
+                    command = "GET_TASK",
+                    agentId = agentId,
+                    timestamp = DateTime.Now
                 };
 
                 await SendMessage(requestMessage);
                 var response = await ReceiveMessage(token);
 
-                if (response?.Type == MessageType.SERVER_TASK_ASSIGNED && response.Data.HasValue)
+                if (response != null && response.ContainsKey("command"))
                 {
-                    var task = response.Data.Value.Deserialize<ProtoBlockTask>();
-                    if (task != null)
+                    string command = response["command"].ToString()!;
+                    if (command == "TASK")
                     {
+                        // Парсим данные задания, правильно извлекая значения из JsonElement
+                        var task = new ProtoBlockTask
+                        {
+                            BlockId = GetInt32Value(response["blockId"]),
+                            StartIndex = GetInt64Value(response["startIndex"]),
+                            EndIndex = GetInt64Value(response["endIndex"]),
+                            SearchParams = new SearchParameters
+                            {
+                                WordCount = GetInt32Value(response["wordCount"]),
+                                BitcoinAddress = GetStringValue(response["targetAddress"])
+                            },
+                            Status = "Assigned"
+                        };
+                        
                         SetState(AgentState.Working);
                         Log($"Получено задание: блок {task.BlockId} ({task.StartIndex}-{task.EndIndex})");
                         return task;
                     }
-                }
-                else if (response?.Type == MessageType.SERVER_NO_TASKS)
-                {
-                    Log("Нет доступных заданий");
+                    else if (command == "NO_TASK")
+                    {
+                        Log("Нет доступных заданий");
+                    }
                 }
 
                 return null;
@@ -347,71 +413,94 @@ namespace BitcoinFinder
 
             try
             {
-                Log($"Начинаем обработку блока {task.BlockId}");
+                Log($"[AGENT] Начинаю обработку блока {task.BlockId} ({task.StartIndex:N0}-{task.EndIndex:N0})");
+                
+                // Включаем предотвращение сна
+                PreventSleep();
                 
                 var finder = new AdvancedSeedPhraseFinder();
                 var bip39Words = finder.GetBip39Words();
                 
-                long processed = 0;
-                long reportInterval = Math.Max(ProgressReportInterval, 1000);
+                long currentIndex = task.StartIndex;
+                long totalProcessed = 0;
                 var startTime = DateTime.Now;
-                var lastReportTime = DateTime.Now;
-
-                for (long i = task.StartIndex; i <= task.EndIndex && !token.IsCancellationRequested; i++)
+                var lastProgressTime = startTime;
+                var lastLogTime = startTime;
+                
+                // Множество для отслеживания уникальности комбинаций
+                var processedCombinations = new HashSet<string>();
+                
+                while (currentIndex <= task.EndIndex && !token.IsCancellationRequested)
                 {
-                    try
+                    // Генерируем seed phrase по индексу
+                    var seedPhrase = GenerateSeedPhraseByIndex(currentIndex, bip39Words, task.SearchParams.WordCount);
+                    
+                    // Проверяем уникальность комбинации
+                    if (!processedCombinations.Add(seedPhrase))
                     {
-                        // Генерируем seed-фразу по индексу
-                        var seedPhrase = GenerateSeedPhraseByIndex(i, bip39Words, 12);
-                        
-                        // Проверяем валидность
-                        if (finder.IsValidSeedPhrase(seedPhrase))
-                        {
-                            var generatedAddress = finder.GenerateBitcoinAddress(seedPhrase);
-                            if (generatedAddress == targetAddress)
-                            {
-                                // Найдено совпадение!
-                                var result = $"Блок {task.BlockId}, индекс {i}: {seedPhrase}";
-                                OnFound?.Invoke(result);
-                                
-                                await ReportFound(task.BlockId, seedPhrase, generatedAddress, i);
-                                Log($"*** НАЙДЕНО СОВПАДЕНИЕ *** {result}");
-                            }
-                        }
-
-                        processed++;
-                        OnProgress?.Invoke(processed);
-
-                        // Отчет о прогрессе
-                        if (processed % reportInterval == 0 || (DateTime.Now - lastReportTime).TotalSeconds > 30)
-                        {
-                            var rate = processed / Math.Max((DateTime.Now - startTime).TotalSeconds, 1);
-                            await ReportProgress(task.BlockId, i, processed, rate);
-                            lastReportTime = DateTime.Now;
-                        }
+                        Log($"[AGENT] ВНИМАНИЕ: Дублированная комбинация обнаружена: {seedPhrase} (индекс: {currentIndex})");
                     }
-                    catch (Exception ex)
+                    
+                    // Логируем текущую комбинацию каждые 1000 итераций
+                    var now = DateTime.Now;
+                    if (totalProcessed % 1000 == 0)
                     {
-                        Log($"Ошибка обработки индекса {i}: {ex.Message}");
+                        Log($"[AGENT] Текущая комбинация: {seedPhrase} (индекс: {currentIndex:N0})");
+                    }
+                    
+                    // Проверяем адрес
+                    var address = finder.GenerateBitcoinAddress(seedPhrase);
+                    if (address == targetAddress)
+                    {
+                        Log($"[AGENT] *** НАЙДЕНО СОВПАДЕНИЕ ***");
+                        Log($"[AGENT] Seed phrase: {seedPhrase}");
+                        Log($"[AGENT] Address: {address}");
+                        Log($"[AGENT] Index: {currentIndex}");
+                        
+                        OnFound?.Invoke($"НАЙДЕНО: {seedPhrase} -> {address} (индекс: {currentIndex})");
+                        
+                        // Отправляем результат на сервер
+                        await ReportFound(task.BlockId, seedPhrase, address, currentIndex);
+                    }
+                    
+                    currentIndex++;
+                    totalProcessed++;
+                    
+                    // Отправляем прогресс каждые 1000 итераций или каждые 10 секунд
+                    if (totalProcessed % 1000 == 0 || (now - lastProgressTime).TotalSeconds >= 10)
+                    {
+                        var rate = totalProcessed / (now - startTime).TotalSeconds;
+                        OnProgress?.Invoke(currentIndex, rate);
+                        await ReportProgress(task.BlockId, currentIndex, totalProcessed, rate);
+                        
+                        // Сохраняем прогресс в конфиг
+                        SaveProgress(task.BlockId, currentIndex);
+                        
+                        lastProgressTime = now;
                     }
                 }
-
-                // Отчет о завершении
-                await ReportTaskCompleted(task.BlockId, processed);
-                Log($"Блок {task.BlockId} обработан полностью ({processed:N0} комбинаций)");
                 
-                SetState(AgentState.Registered); // Возвращаемся в состояние ожидания заданий
+                // Отправляем завершение задания
+                await ReportTaskCompleted(task.BlockId, totalProcessed);
+                
+                Log($"[AGENT] Блок {task.BlockId} обработан успешно. Обработано: {totalProcessed:N0} комбинаций");
+                Log($"[AGENT] Уникальных комбинаций: {processedCombinations.Count:N0}");
+                
+                // Отключаем предотвращение сна
+                AllowSleep();
+                
                 return true;
             }
             catch (OperationCanceledException)
             {
-                Log($"Обработка блока {task.BlockId} отменена");
+                Log($"[AGENT] Обработка блока {task.BlockId} отменена");
+                AllowSleep();
                 return false;
             }
             catch (Exception ex)
             {
-                Log($"Ошибка обработки блока {task.BlockId}: {ex.Message}");
-                SetState(AgentState.Error);
+                Log($"[AGENT] Ошибка обработки блока {task.BlockId}: {ex.Message}");
+                AllowSleep();
                 return false;
             }
         }
@@ -429,26 +518,26 @@ namespace BitcoinFinder
         {
             try
             {
-                var progressMessage = new ProtoMessage
+                Log($"[AGENT] Отправляю прогресс: блок {blockId}, индекс {currentIndex:N0}, обработано {processed:N0}, скорость {rate:F1}/сек");
+                
+                var progressMessage = new
                 {
-                    Type = MessageType.AGENT_REPORT_PROGRESS,
-                    AgentId = Environment.MachineName,
-                    Data = JsonSerializer.SerializeToElement(new
-                    {
-                        blockId = blockId,
-                        currentIndex = currentIndex,
-                        processed = processed,
-                        rate = rate,
-                        timestamp = DateTime.UtcNow
-                    }),
-                    Timestamp = DateTime.UtcNow
+                    command = "REPORT_PROGRESS",
+                    agentId = currentAgentId,
+                    blockId = blockId,
+                    currentIndex = currentIndex,
+                    processed = processed,
+                    rate = rate,
+                    currentCombination = GenerateSeedPhraseByIndex(currentIndex, new AdvancedSeedPhraseFinder().GetBip39Words(), 12),
+                    timestamp = DateTime.Now
                 };
-
+                
                 await SendMessage(progressMessage);
+                Log($"[AGENT] Прогресс отправлен успешно");
             }
             catch (Exception ex)
             {
-                Log($"Ошибка отправки прогресса: {ex.Message}");
+                Log($"[AGENT] Ошибка отправки прогресса: {ex.Message}");
             }
         }
 
@@ -456,26 +545,23 @@ namespace BitcoinFinder
         {
             try
             {
-                var foundMessage = new ProtoMessage
+                var foundMessage = new
                 {
-                    Type = MessageType.AGENT_REPORT_RESULT,
-                    AgentId = Environment.MachineName,
-                    Data = JsonSerializer.SerializeToElement(new
-                    {
-                        blockId = blockId,
-                        seedPhrase = seedPhrase,
-                        address = address,
-                        index = index,
-                        foundAt = DateTime.UtcNow
-                    }),
-                    Timestamp = DateTime.UtcNow
+                    command = "REPORT_FOUND",
+                    agentId = currentAgentId,
+                    blockId = blockId,
+                    seedPhrase = seedPhrase,
+                    address = address,
+                    index = index,
+                    timestamp = DateTime.Now
                 };
-
+                
                 await SendMessage(foundMessage);
+                Log($"[AGENT] Отправлен результат: {seedPhrase} -> {address}");
             }
             catch (Exception ex)
             {
-                Log($"Ошибка отправки найденного результата: {ex.Message}");
+                Log($"[AGENT] Ошибка отправки результата: {ex.Message}");
             }
         }
 
@@ -483,24 +569,21 @@ namespace BitcoinFinder
         {
             try
             {
-                var completedMessage = new ProtoMessage
+                var completedMessage = new
                 {
-                    Type = MessageType.AGENT_BLOCK_COMPLETED,
-                    AgentId = Environment.MachineName,
-                    Data = JsonSerializer.SerializeToElement(new
-                    {
-                        blockId = blockId,
-                        processed = processed,
-                        completedAt = DateTime.UtcNow
-                    }),
-                    Timestamp = DateTime.UtcNow
+                    command = "TASK_COMPLETED",
+                    agentId = currentAgentId,
+                    blockId = blockId,
+                    processed = processed,
+                    timestamp = DateTime.Now
                 };
-
+                
                 await SendMessage(completedMessage);
+                Log($"[AGENT] Отправлено завершение блока {blockId}");
             }
             catch (Exception ex)
             {
-                Log($"Ошибка отправки завершения задания: {ex.Message}");
+                Log($"[AGENT] Ошибка отправки завершения: {ex.Message}");
             }
         }
 
@@ -544,6 +627,63 @@ namespace BitcoinFinder
             OnLog?.Invoke(msg);
             Console.WriteLine(msg);
         }
+
+        // Вспомогательные методы для извлечения значений из JsonElement
+        private int GetInt32Value(object value)
+        {
+            if (value is JsonElement jsonElement)
+            {
+                return jsonElement.GetInt32();
+            }
+            else if (value is int intValue)
+            {
+                return intValue;
+            }
+            else if (value is long longValue)
+            {
+                return (int)longValue;
+            }
+            else
+            {
+                return Convert.ToInt32(value);
+            }
+        }
+
+        private long GetInt64Value(object value)
+        {
+            if (value is JsonElement jsonElement)
+            {
+                return jsonElement.GetInt64();
+            }
+            else if (value is long longValue)
+            {
+                return longValue;
+            }
+            else if (value is int intValue)
+            {
+                return intValue;
+            }
+            else
+            {
+                return Convert.ToInt64(value);
+            }
+        }
+
+        private string GetStringValue(object value)
+        {
+            if (value is JsonElement jsonElement)
+            {
+                return jsonElement.GetString() ?? "";
+            }
+            else if (value is string stringValue)
+            {
+                return stringValue;
+            }
+            else
+            {
+                return value?.ToString() ?? "";
+            }
+        }
         public void Dispose()
         {
             _writer?.Dispose();
@@ -552,21 +692,6 @@ namespace BitcoinFinder
             _writer = null;
             _reader = null;
             _client = null;
-        }
-        public class BlockTask
-        {
-            public string command { get; set; } = "TASK";
-            public int blockId { get; set; }
-            public string seed { get; set; } = "";
-            public string address { get; set; } = "";
-            public int wordCount { get; set; }
-            public long startIndex { get; set; }
-            public long endIndex { get; set; }
-        }
-        public class AgentProgress
-        {
-            public int blockId { get; set; }
-            public long currentIndex { get; set; }
         }
     }
 } 

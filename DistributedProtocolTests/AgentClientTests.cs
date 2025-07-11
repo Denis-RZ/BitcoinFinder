@@ -23,7 +23,8 @@ public class AgentClientTests
         await client.SendRegisterMessage("agent1");
         var registerResp = await client.ReceiveMessage();
         Assert.NotNull(registerResp);
-        Assert.Equal(MessageType.AGENT_REGISTER, registerResp!.Type);
+        Assert.True(registerResp!.ContainsKey("Type"));
+        Assert.Equal("AGENT_REGISTER", registerResp["Type"].ToString());
 
         await client.RequestTask("agent1");
         var task = await client.ReceiveTask();

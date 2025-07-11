@@ -85,7 +85,7 @@ namespace BitcoinFinder
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[SERVER] Invalid message: {ex.Message}");
+                        Console.WriteLine($"[SERVER] Invalid message: {ex.Message}\nRaw: {line}");
                         continue;
                     }
 
@@ -93,6 +93,11 @@ namespace BitcoinFinder
                     if (response != null)
                     {
                         await writer.WriteLineAsync(response.ToJson());
+                    }
+                    else
+                    {
+                        // Логируем нераспознанное сообщение
+                        Console.WriteLine($"[SERVER] Unhandled message type: {msg.Type} | Full: {System.Text.Json.JsonSerializer.Serialize(msg)}");
                     }
                 }
             }

@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <Compile Remove="DistributedProtocolTests/**/*.cs" />
+    <Compile Remove="TestDistributedAgent/**/*.cs" />
+    <Compile Remove="TestDistributedServer/**/*.cs" />
   </ItemGroup>
 
 </Project> 

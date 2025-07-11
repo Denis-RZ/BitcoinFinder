@@ -251,6 +251,9 @@ namespace BitcoinFinder
             dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "CompletedBlocks", HeaderText = "Блоков", Width = 80 });
             dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "LastUpdate", HeaderText = "Последняя активность", Width = 150 });
 
+            // Добавляем обработчик для корректного копирования
+            dgvAgents.KeyDown += DgvAgents_KeyDown;
+
             agentsGroup.Controls.Add(dgvAgents);
             mainLayout.Controls.Add(agentsGroup, 0, 2);
 
@@ -485,6 +488,7 @@ namespace BitcoinFinder
                 return;
             }
 
+            AddLog($"[UI] Получено обновление статистики: {stats.AgentStats.Count} агентов");
             UpdateStatsDisplay(stats);
         }
 
@@ -521,8 +525,11 @@ namespace BitcoinFinder
 
             // Обновляем таблицу агентов
             dgvAgents.Rows.Clear();
+            AddLog($"[UI] Обновляем грид агентов: {stats.AgentStats.Count} агентов");
+            
             foreach (var agentStat in stats.AgentStats)
             {
+                AddLog($"[UI] Добавляем агента в грид: {agentStat.AgentId}, обработано: {agentStat.ProcessedCount:N0}, скорость: {agentStat.CurrentRate:F1}, блоков: {agentStat.CompletedBlocks}");
                 dgvAgents.Rows.Add(
                     agentStat.AgentId,
                     agentStat.ProcessedCount.ToString("N0"),
@@ -536,7 +543,8 @@ namespace BitcoinFinder
         private void AddLog(string message)
         {
             var timestamp = DateTime.Now.ToString("HH:mm:ss");
-            txtServerLog.AppendText($"[{timestamp}] {message}\r\n");
+            var logMessage = $"[{timestamp}] {message}";
+            txtServerLog.AppendText(logMessage + "\r\n");
             txtServerLog.SelectionStart = txtServerLog.Text.Length;
             txtServerLog.ScrollToCaret();
 
@@ -546,6 +554,9 @@ namespace BitcoinFinder
                 var lines = txtServerLog.Lines.Skip(500).ToArray();
                 txtServerLog.Text = string.Join("\r\n", lines);
             }
+            
+            // Логируем в файл
+            // Logger.LogServer(message); // Закомментировано для уменьшения мусора в логах
         }
 
         private void ServerForm_FormClosing(object? sender, FormClosingEventArgs e)
@@ -649,6 +660,20 @@ namespace BitcoinFinder
             catch (Exception)
             {
                 return "127.0.0.1";
+            }
+        }
+
+        private void DgvAgents_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Control && e.KeyCode == Keys.C)
+            {
+                if (dgvAgents.SelectedRows.Count > 0)
+                {
+                    string data = string.Join("\t", dgvAgents.SelectedRows.Cast<DataGridViewRow>()
+                        .Select(row => string.Join("\t", row.Cells.Cast<DataGridViewCell>()
+                            .Select(cell => cell.Value?.ToString() ?? ""))));
+                    Clipboard.SetText(data);
+                }
             }
         }
     }

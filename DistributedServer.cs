@@ -58,6 +58,39 @@ namespace BitcoinFinder
         private Task? serverSearchTask;
         private AdvancedSeedPhraseFinder? serverFinder;
         
+        private const string AgentStateFile = "server_agents_state.json";
+        private Dictionary<string, AgentProgressState> agentProgressStates = new();
+
+        private class AgentProgressState
+        {
+            public string AgentId { get; set; } = "";
+            public string AgentName { get; set; } = "";
+            public int Threads { get; set; } = 1;
+            public int? LastBlockId { get; set; }
+            public long? LastIndex { get; set; }
+            public DateTime LastSeen { get; set; }
+        }
+
+        private void SaveAgentProgressStates()
+        {
+            try
+            {
+                File.WriteAllText(AgentStateFile, System.Text.Json.JsonSerializer.Serialize(agentProgressStates));
+            }
+            catch { }
+        }
+        private void LoadAgentProgressStates()
+        {
+            try
+            {
+                if (File.Exists(AgentStateFile))
+                {
+                    agentProgressStates = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, AgentProgressState>>(File.ReadAllText(AgentStateFile)) ?? new();
+                }
+            }
+            catch { agentProgressStates = new(); }
+        }
+        
         public event Action<string>? OnLog;
         public event Action<string>? OnFoundResult;
         public event Action<ServerStats>? OnStatsUpdate;
@@ -70,6 +103,7 @@ namespace BitcoinFinder
             assignedBlocks = new ConcurrentDictionary<int, SearchBlock>();
             foundResults = new List<string>();
             agentStats = new ConcurrentDictionary<string, AgentStats>();
+            LoadAgentProgressStates();
         }
 
         public async Task StartAsync(string targetBitcoinAddress, int wordCount, long? totalCombinations = null, bool enableServerSearch = true, int serverThreads = 2)
@@ -157,7 +191,7 @@ namespace BitcoinFinder
             
             serverCts?.Cancel();
             tcpListener?.Stop();
-            
+            SaveAgentProgressStates();
             Log("[SERVER] Сервер остановлен");
         }
         
@@ -346,6 +380,10 @@ namespace BitcoinFinder
         {
             long processed = 0;
             var startTime = DateTime.Now;
+            var lastLogTime = startTime;
+            
+            // Множество для отслеживания уникальности комбинаций
+            var processedCombinations = new HashSet<string>();
             
             for (long i = block.StartIndex; i <= block.EndIndex && !token.IsCancellationRequested; i++)
             {
@@ -353,6 +391,19 @@ namespace BitcoinFinder
                 {
                     // Генерируем seed-фразу по индексу
                     string seedPhrase = GenerateSeedPhraseByIndex(i, bip39Words, block.WordCount);
+                    
+                    // Проверяем уникальность комбинации
+                    if (!processedCombinations.Add(seedPhrase))
+                    {
+                        Log($"[SERVER] ВНИМАНИЕ: Дублированная комбинация обнаружена в потоке {threadId}: {seedPhrase} (индекс: {i})");
+                    }
+                    
+                    // Логируем текущую комбинацию каждые 5000 итераций
+                    var now = DateTime.Now;
+                    if (processed % 5000 == 0)
+                    {
+                        Log($"[SERVER] Поток {threadId}: текущая комбинация: {seedPhrase} (индекс: {i:N0})");
+                    }
                     
                     // Проверяем валидность
                     if (!finder.IsValidSeedPhrase(seedPhrase))
@@ -396,7 +447,7 @@ namespace BitcoinFinder
                     {
                         var elapsed = DateTime.Now - startTime;
                         var rate = processed / Math.Max(elapsed.TotalSeconds, 1);
-                        Log($"[SERVER] Поток {threadId}: обработано {processed:N0}, скорость {rate:F0}/сек");
+                        Log($"[SERVER] Поток {threadId}: обработано {processed:N0}, скорость {rate:F0}/сек, уникальных комбинаций: {processedCombinations.Count:N0}");
                     }
                 }
                 catch (Exception ex)
@@ -404,6 +455,8 @@ namespace BitcoinFinder
                     Log($"[SERVER] Ошибка обработки индекса {i} в потоке {threadId}: {ex.Message}");
                 }
             }
+            
+            Log($"[SERVER] Поток {threadId} завершил блок {block.BlockId}. Всего обработано: {processed:N0}, уникальных комбинаций: {processedCombinations.Count:N0}");
         }
         
         private string GenerateSeedPhraseByIndex(long index, List<string> bip39Words, int wordCount)
@@ -499,7 +552,10 @@ namespace BitcoinFinder
                     connectedAgents.TryAdd(agentId, agentConnection);
                     agentStats.TryAdd(agentId, new AgentStats { AgentId = agentId });
                     
+                    Log($"[SERVER] Создана статистика для агента {agentId}");
+                    
                     Log($"[SERVER] Агент {agentId} подключен");
+                    // Logger.LogConnection($"Агент {agentId} подключен с адреса {clientEndpoint}");
                     
                     // Ждем приветствие от агента (опционально - для обратной совместимости)
                     bool isEnhancedAgent = false;
@@ -674,6 +730,7 @@ namespace BitcoinFinder
                 connectedAgents.TryRemove(agentId, out _);
                 agentStats.TryRemove(agentId, out _);
                 Log($"[SERVER] Агент {agentId} отключен");
+                // Logger.LogConnection($"Агент {agentId} отключен");
             }
         }
         
@@ -736,6 +793,29 @@ namespace BitcoinFinder
                     }
                 }
                 
+                // Сохраняем информацию об агенте
+                string agentName = request.ContainsKey("agentName") ? request["agentName"].ToString()! : agent.AgentId;
+                int threads = request.ContainsKey("threads") ? Convert.ToInt32(request["threads"]) : 1;
+                
+                if (!agentProgressStates.ContainsKey(agent.AgentId))
+                {
+                    agentProgressStates[agent.AgentId] = new AgentProgressState
+                    {
+                        AgentId = agent.AgentId,
+                        AgentName = agentName,
+                        Threads = threads,
+                        LastSeen = DateTime.Now
+                    };
+                    Log($"[SERVER] Создана запись прогресса для агента {agent.AgentId} ({agentName}, {threads} потоков)");
+                }
+                else
+                {
+                    agentProgressStates[agent.AgentId].AgentName = agentName;
+                    agentProgressStates[agent.AgentId].Threads = threads;
+                    agentProgressStates[agent.AgentId].LastSeen = DateTime.Now;
+                    Log($"[SERVER] Обновлена информация агента {agent.AgentId} ({agentName}, {threads} потоков)");
+                }
+                
                 // Отправляем ответ
                 var response = new
                 {
@@ -764,6 +844,18 @@ namespace BitcoinFinder
         {
             try
             {
+                // Получаем логический ID агента из сообщения, если он есть
+                string logicalAgentId = agentId;
+                if (request.ContainsKey("agentId"))
+                {
+                    string providedId = request["agentId"].ToString()!;
+                    if (!string.IsNullOrWhiteSpace(providedId))
+                    {
+                        logicalAgentId = providedId;
+                        Log($"[SERVER] Используем логический ID агента из сообщения: {logicalAgentId} (вместо сетевого: {agentId})");
+                    }
+                }
+
                 var response = new
                 {
                     command = "GOODBYE_ACK",
@@ -772,6 +864,7 @@ namespace BitcoinFinder
                 };
                 
                 await writer.WriteLineAsync(JsonSerializer.Serialize(response));
+                Log($"[SERVER] Агент {logicalAgentId} попрощался");
             }
             catch (Exception ex)
             {
@@ -797,6 +890,9 @@ namespace BitcoinFinder
                 
                 // Обновляем статистику активности
                 agent.LastActivity = DateTime.Now;
+                
+                // Логируем heartbeat для отладки
+                Log($"[SERVER] Получен heartbeat от агента {agent.AgentId}, статус: {status}");
             }
             catch (Exception ex)
             {
@@ -809,18 +905,30 @@ namespace BitcoinFinder
         {
             try
             {
+                // Получаем логический ID агента из сообщения, если он есть
+                string logicalAgentId = agentId;
+                if (request.ContainsKey("agentId"))
+                {
+                    string providedId = request["agentId"].ToString()!;
+                    if (!string.IsNullOrWhiteSpace(providedId))
+                    {
+                        logicalAgentId = providedId;
+                        Log($"[SERVER] Используем логический ID агента из сообщения: {logicalAgentId} (вместо сетевого: {agentId})");
+                    }
+                }
+
                 int blockId = Convert.ToInt32(request["blockId"]);
                 
-                if (assignedBlocks.TryGetValue(blockId, out var block) && block.AssignedTo == agentId)
+                if (assignedBlocks.TryGetValue(blockId, out var block) && block.AssignedTo == logicalAgentId)
                 {
                     block.Status = BlockStatus.Assigned; // Подтверждаем назначение
-                    Log($"[SERVER] Агент {agentId} подтвердил принятие блока {blockId}");
+                    Log($"[SERVER] Агент {logicalAgentId} подтвердил принятие блока {blockId}");
                     
                     await writer.WriteLineAsync(JsonSerializer.Serialize(new { command = "ACK" }));
                 }
                 else
                 {
-                    Log($"[SERVER] Агент {agentId} пытается подтвердить несуществующий блок {blockId}");
+                    Log($"[SERVER] Агент {logicalAgentId} пытается подтвердить несуществующий блок {blockId}");
                     await SendErrorResponse(writer, "INVALID_BLOCK", $"Block {blockId} not found or not assigned to you");
                 }
             }
@@ -835,14 +943,26 @@ namespace BitcoinFinder
         {
             try
             {
+                // Получаем логический ID агента из сообщения, если он есть
+                string logicalAgentId = agentId;
+                if (request.ContainsKey("agentId"))
+                {
+                    string providedId = request["agentId"].ToString()!;
+                    if (!string.IsNullOrWhiteSpace(providedId))
+                    {
+                        logicalAgentId = providedId;
+                        Log($"[SERVER] Используем логический ID агента из сообщения: {logicalAgentId} (вместо сетевого: {agentId})");
+                    }
+                }
+
                 int blockId = Convert.ToInt32(request["blockId"]);
                 
-                if (assignedBlocks.TryRemove(blockId, out var block) && block.AssignedTo == agentId)
+                if (assignedBlocks.TryRemove(blockId, out var block) && block.AssignedTo == logicalAgentId)
                 {
                     block.Status = BlockStatus.Completed;
                     block.CompletedAt = DateTime.Now;
                     
-                    // Обновляем статистику
+                    // Обновляем статистику по сетевому ID агента (agentId), а не по логическому (logicalAgentId)
                     if (agentStats.TryGetValue(agentId, out var stats))
                     {
                         stats.CompletedBlocks++;
@@ -851,13 +971,13 @@ namespace BitcoinFinder
                     
                     Interlocked.Increment(ref completedBlocks);
                     
-                    Log($"[SERVER] Агент {agentId} завершил блок {blockId}");
+                    Log($"[SERVER] Агент {logicalAgentId} завершил блок {blockId}");
                     
                     await writer.WriteLineAsync(JsonSerializer.Serialize(new { command = "ACK" }));
                 }
                 else
                 {
-                    Log($"[SERVER] Агент {agentId} пытается завершить несуществующий блок {blockId}");
+                    Log($"[SERVER] Агент {logicalAgentId} пытается завершить несуществующий блок {blockId}");
                     await SendErrorResponse(writer, "INVALID_BLOCK", $"Block {blockId} not found or not assigned to you");
                 }
             }
@@ -901,23 +1021,73 @@ namespace BitcoinFinder
             {
                 SearchBlock? block = null;
                 
+                Log($"[SERVER] Агент {agent.AgentId} запрашивает задание. Доступно блоков в очереди: {pendingBlocks.Count}");
+                Log($"[SERVER] Текущий assignedBlocks.Count: {assignedBlocks.Count}");
+                
+                // Проверяем сохраненный прогресс агента
+                if (agentProgressStates.TryGetValue(agent.AgentId, out var savedProgress) && 
+                    savedProgress.LastBlockId.HasValue && savedProgress.LastIndex.HasValue)
+                {
+                    Log($"[SERVER] Найден сохраненный прогресс для агента {agent.AgentId}: блок {savedProgress.LastBlockId}, позиция {savedProgress.LastIndex:N0}");
+                    
+                    // Проверяем, есть ли незавершенный блок для этого агента
+                    var unfinishedBlock = assignedBlocks.Values.FirstOrDefault(b => 
+                        b.BlockId == savedProgress.LastBlockId.Value && 
+                        b.AssignedTo == agent.AgentId && 
+                        b.Status == BlockStatus.Assigned);
+                    
+                    if (unfinishedBlock != null)
+                    {
+                        Log($"[SERVER] Восстанавливаем незавершенный блок {unfinishedBlock.BlockId} для агента {agent.AgentId}");
+                        block = unfinishedBlock;
+                    }
+                    else
+                    {
+                        Log($"[SERVER] Создаем новый блок с позиции {savedProgress.LastIndex:N0} для агента {agent.AgentId}");
+                        // Создаем новый блок с позиции, где агент остановился
+                        block = new SearchBlock
+                        {
+                            BlockId = currentBlockId++,
+                            StartIndex = savedProgress.LastIndex.Value,
+                            EndIndex = Math.Min(savedProgress.LastIndex.Value + blockSize - 1, totalCombinations - 1),
+                            WordCount = wordCount,
+                            TargetAddress = targetAddress,
+                            Status = BlockStatus.Assigned,
+                            AssignedTo = agent.AgentId,
+                            AssignedAt = DateTime.Now,
+                            CreatedAt = DateTime.Now,
+                            CurrentIndex = savedProgress.LastIndex.Value,
+                            Priority = CalculateBlockPriority(savedProgress.LastIndex.Value, Math.Min(savedProgress.LastIndex.Value + blockSize - 1, totalCombinations - 1))
+                        };
+                        
+                        assignedBlocks.TryAdd(block.BlockId, block);
+                        Log($"[SERVER] Создан восстановленный блок {block.BlockId} для агента {agent.AgentId}");
+                    }
+                }
+                
                 // Пытаемся получить блок с приоритетом
                 lock (lockObject)
                 {
                     // Ищем блоки с высоким приоритетом сначала
                     var availableBlocks = pendingBlocks.ToArray().OrderByDescending(b => b.Priority).ToArray();
+                    Log($"[SERVER] Найдено {availableBlocks.Length} доступных блоков");
                     
                     if (availableBlocks.Length > 0)
                     {
                         block = availableBlocks[0];
+                        Log($"[SERVER] Выбран блок {block.BlockId} с приоритетом {block.Priority}");
+                        Log($"[SERVER] Блок {block.BlockId} уже в assignedBlocks: {assignedBlocks.ContainsKey(block.BlockId)}");
                         
                         // Удаляем найденный блок из очереди
                         var tempQueue = new ConcurrentQueue<SearchBlock>();
                         SearchBlock? tempBlock;
+                        int removedCount = 0;
                         while (pendingBlocks.TryDequeue(out tempBlock))
                         {
                             if (tempBlock.BlockId != block.BlockId)
                                 tempQueue.Enqueue(tempBlock);
+                            else
+                                removedCount++;
                         }
                         
                         // Возвращаем все блоки обратно кроме выбранного
@@ -925,6 +1095,8 @@ namespace BitcoinFinder
                         {
                             pendingBlocks.Enqueue(tempBlock);
                         }
+                        
+                        Log($"[SERVER] Удалено {removedCount} экземпляров блока {block.BlockId} из очереди");
                     }
                 }
                 
@@ -934,7 +1106,22 @@ namespace BitcoinFinder
                     block.AssignedTo = agent.AgentId;
                     block.AssignedAt = DateTime.Now;
                     
-                    assignedBlocks.TryAdd(block.BlockId, block);
+                    Log($"[SERVER] Назначаем блок {block.BlockId} агенту {agent.AgentId}");
+                    Log($"[SERVER] Блок {block.BlockId} уже в assignedBlocks: {assignedBlocks.ContainsKey(block.BlockId)}");
+                    
+                    bool added = assignedBlocks.TryAdd(block.BlockId, block);
+                    Log($"[SERVER] Попытка добавить блок {block.BlockId} в assignedBlocks: {(added ? "УСПЕХ" : "ОШИБКА - уже существует")}");
+                    
+                    if (!added)
+                    {
+                        Log($"[SERVER] ОШИБКА: Блок {block.BlockId} уже существует в assignedBlocks!");
+                        if (assignedBlocks.TryGetValue(block.BlockId, out var existingBlock))
+                        {
+                            Log($"[SERVER] Существующий блок назначен агенту: {existingBlock.AssignedTo}");
+                        }
+                    }
+                    
+                    Log($"[SERVER] После назначения assignedBlocks.Count: {assignedBlocks.Count}");
                     
                     var response = new
                     {
@@ -958,16 +1145,19 @@ namespace BitcoinFinder
                     // Генерируем новые блоки если очередь пуста
                     if (pendingBlocks.IsEmpty && currentBlockId * blockSize < totalCombinations)
                     {
+                        Log($"[SERVER] Очередь пуста, генерируем новые блоки...");
                         GenerateMoreBlocks();
                         
                         // Пробуем снова после генерации
                         if (pendingBlocks.TryDequeue(out block))
                         {
+                            Log($"[SERVER] Получен новый блок {block.BlockId} после генерации");
                             block.Status = BlockStatus.Assigned;
                             block.AssignedTo = agent.AgentId;
                             block.AssignedAt = DateTime.Now;
                             
-                            assignedBlocks.TryAdd(block.BlockId, block);
+                            bool added = assignedBlocks.TryAdd(block.BlockId, block);
+                            Log($"[SERVER] Попытка добавить новый блок {block.BlockId} в assignedBlocks: {(added ? "УСПЕХ" : "ОШИБКА")}");
                             
                             var response = new
                             {
@@ -1001,6 +1191,7 @@ namespace BitcoinFinder
                     };
                     
                     await writer.WriteLineAsync(JsonSerializer.Serialize(noTaskResponse));
+                    Log($"[SERVER] Нет доступных заданий для агента {agent.AgentId}");
                 }
             }
             catch (Exception ex)
@@ -1047,37 +1238,128 @@ namespace BitcoinFinder
         
         private async Task HandleProgressReport(Dictionary<string, object> request, string agentId)
         {
-            int blockId = Convert.ToInt32(request["blockId"]);
-            long currentIndex = Convert.ToInt64(request["currentIndex"]);
-            long processed = request.ContainsKey("processed") ? Convert.ToInt64(request["processed"]) : 0;
-            double rate = request.ContainsKey("rate") ? Convert.ToDouble(request["rate"]) : 0;
-            
-            if (assignedBlocks.TryGetValue(blockId, out var block) && block.AssignedTo == agentId)
+            // Получаем логический ID агента из сообщения, если он есть
+            string logicalAgentId = agentId;
+            if (request.ContainsKey("agentId"))
             {
+                string providedId = request["agentId"].ToString()!;
+                if (!string.IsNullOrWhiteSpace(providedId))
+                {
+                    logicalAgentId = providedId;
+                    Log($"[SERVER] Используем логический ID агента из сообщения: {logicalAgentId} (вместо сетевого: {agentId})");
+                }
+            }
+
+            int blockId = GetInt32Value(request["blockId"]);
+            long currentIndex = GetInt64Value(request["currentIndex"]);
+            long processed = request.ContainsKey("processed") ? GetInt64Value(request["processed"]) : 0;
+            double rate = request.ContainsKey("rate") ? GetDoubleValue(request["rate"]) : 0;
+
+            Log($"[SERVER] Получен прогресс от агента {logicalAgentId}: блок {blockId}, индекс {currentIndex:N0}, обработано {processed:N0}, скорость {rate:F1}/сек");
+            
+            // Логируем текущую комбинацию агента каждые 10000 итераций
+            if (processed % 10000 == 0 && request.ContainsKey("currentCombination"))
+            {
+                string currentCombination = request["currentCombination"].ToString() ?? "неизвестно";
+                Log($"[SERVER] Агент {logicalAgentId}: текущая комбинация: {currentCombination} (индекс: {currentIndex:N0})");
+            }
+            
+            Log($"[SERVER] Текущий assignedBlocks.Count: {assignedBlocks.Count}");
+            Log($"[SERVER] Блок {blockId} в assignedBlocks: {assignedBlocks.ContainsKey(blockId)}");
+            
+            if (assignedBlocks.ContainsKey(blockId))
+            {
+                var existingBlock = assignedBlocks[blockId];
+                Log($"[SERVER] Блок {blockId} назначен агенту: {existingBlock.AssignedTo}");
+            }
+
+            if (assignedBlocks.TryGetValue(blockId, out var block) && block.AssignedTo == logicalAgentId)
+            {
+                Log($"[SERVER] УСПЕХ: Найден блок {blockId} для агента {logicalAgentId}");
                 block.CurrentIndex = currentIndex;
                 block.LastProgressAt = DateTime.Now;
-                
-                // Обновляем статистику агента
+
+                // Ищем статистику по сетевому ID агента (agentId), а не по логическому (logicalAgentId)
                 if (agentStats.TryGetValue(agentId, out var stats))
                 {
+                    // Сохраняем предыдущее значение для корректного TotalProcessed
+                    long prevProcessed = stats.ProcessedCount;
                     stats.ProcessedCount = processed;
                     stats.CurrentRate = rate;
                     stats.LastUpdate = DateTime.Now;
+                    // Увеличиваем TotalProcessed только на разницу
+                    if (processed > prevProcessed)
+                        stats.TotalProcessed += (processed - prevProcessed);
+                    
+                    Log($"[SERVER] Обновлена статистика агента {agentId}: ProcessedCount={stats.ProcessedCount:N0}, CurrentRate={stats.CurrentRate:F1}, TotalProcessed={stats.TotalProcessed:N0}");
+                    
+                    // Сохраняем прогресс агента
+                    if (agentProgressStates.ContainsKey(agentId))
+                    {
+                        agentProgressStates[agentId].LastBlockId = blockId;
+                        agentProgressStates[agentId].LastIndex = currentIndex;
+                        agentProgressStates[agentId].LastSeen = DateTime.Now;
+                    }
+                    else
+                    {
+                        agentProgressStates[agentId] = new AgentProgressState
+                        {
+                            AgentId = agentId,
+                            LastBlockId = blockId,
+                            LastIndex = currentIndex,
+                            LastSeen = DateTime.Now
+                        };
+                    }
+                    
+                    // Сохраняем состояние в файл
+                    SaveAgentProgressStates();
                 }
-                
-                Interlocked.Add(ref totalProcessed, processed - (stats?.ProcessedCount ?? 0));
+                else
+                {
+                    Log($"[SERVER] ОШИБКА: Статистика агента {agentId} не найдена!");
+                    Log($"[SERVER] Доступные ключи в agentStats: {string.Join(", ", agentStats.Keys)}");
+                }
             }
+            else
+            {
+                Log($"[SERVER] ОШИБКА: Блок {blockId} не найден или не назначен агенту {logicalAgentId}");
+                if (!assignedBlocks.ContainsKey(blockId))
+                {
+                    Log($"[SERVER] Блок {blockId} отсутствует в assignedBlocks");
+                }
+                else if (assignedBlocks.TryGetValue(blockId, out var existingBlock))
+                {
+                    Log($"[SERVER] Блок {blockId} назначен другому агенту: {existingBlock.AssignedTo}");
+                }
+            }
+            
+            // Немедленно обновляем UI
+            var currentStats = GetCurrentStats();
+            Log($"[SERVER] Вызываем OnStatsUpdate с {currentStats.AgentStats.Count} агентами");
+            OnStatsUpdate?.Invoke(currentStats);
         }
         
         private async Task HandleFoundReport(Dictionary<string, object> request, string agentId)
         {
+            // Получаем логический ID агента из сообщения, если он есть
+            string logicalAgentId = agentId;
+            if (request.ContainsKey("agentId"))
+            {
+                string providedId = request["agentId"].ToString()!;
+                if (!string.IsNullOrWhiteSpace(providedId))
+                {
+                    logicalAgentId = providedId;
+                    Log($"[SERVER] Используем логический ID агента из сообщения: {logicalAgentId} (вместо сетевого: {agentId})");
+                }
+            }
+
             string combination = request["combination"].ToString()!;
             string privateKey = request.ContainsKey("privateKey") ? request["privateKey"].ToString()! : "";
             string address = request.ContainsKey("address") ? request["address"].ToString()! : "";
-            long index = request.ContainsKey("index") ? Convert.ToInt64(request["index"]) : 0;
+            long index = request.ContainsKey("index") ? GetInt64Value(request["index"]) : 0;
             
             var result = $"*** НАЙДЕНО СОВПАДЕНИЕ ***\n" +
-                        $"Агент: {agentId}\n" +
+                        $"Агент: {logicalAgentId}\n" +
                         $"Seed фраза: {combination}\n" +
                         $"Приватный ключ: {privateKey}\n" +
                         $"Адрес: {address}\n" +
@@ -1085,7 +1367,7 @@ namespace BitcoinFinder
                         $"Время: {DateTime.Now}";
             
             foundResults.Add(result);
-            Log($"[SERVER] *** НАЙДЕНО СОВПАДЕНИЕ АГЕНТОМ {agentId} ***");
+            Log($"[SERVER] *** НАЙДЕНО СОВПАДЕНИЕ АГЕНТОМ {logicalAgentId} ***");
             Log($"[SERVER] Seed фраза: {combination}");
             Log($"[SERVER] Приватный ключ: {privateKey}");
             
@@ -1106,25 +1388,41 @@ namespace BitcoinFinder
         
         private async Task HandleBlockRelease(Dictionary<string, object> request, string agentId)
         {
-            int blockId = Convert.ToInt32(request["blockId"]);
-            long totalProcessed = request.ContainsKey("totalProcessed") ? Convert.ToInt64(request["totalProcessed"]) : 0;
-            
-            if (assignedBlocks.TryRemove(blockId, out var block) && block.AssignedTo == agentId)
+            // Получаем логический ID агента из сообщения, если он есть
+            string logicalAgentId = agentId;
+            if (request.ContainsKey("agentId"))
+            {
+                string providedId = request["agentId"].ToString()!;
+                if (!string.IsNullOrWhiteSpace(providedId))
+                {
+                    logicalAgentId = providedId;
+                    Log($"[SERVER] Используем логический ID агента из сообщения: {logicalAgentId} (вместо сетевого: {agentId})");
+                }
+            }
+
+            int blockId = GetInt32Value(request["blockId"]);
+            long totalProcessed = request.ContainsKey("totalProcessed") ? GetInt64Value(request["totalProcessed"]) : 0;
+
+            Log($"[SERVER] Получено завершение блока от агента {logicalAgentId}: блок {blockId}, всего обработано {totalProcessed:N0}");
+
+            if (assignedBlocks.TryRemove(blockId, out var block) && block.AssignedTo == logicalAgentId)
             {
                 block.Status = BlockStatus.Completed;
                 block.CompletedAt = DateTime.Now;
-                
+
                 Interlocked.Increment(ref completedBlocks);
-                
-                // Обновляем статистику агента
+
+                // Ищем статистику по сетевому ID агента (agentId), а не по логическому (logicalAgentId)
                 if (agentStats.TryGetValue(agentId, out var stats))
                 {
                     stats.CompletedBlocks++;
                     stats.TotalProcessed += totalProcessed;
+                    stats.LastUpdate = DateTime.Now;
+                    Log($"[SERVER] Обновлена статистика завершения агента {agentId}: CompletedBlocks={stats.CompletedBlocks}, TotalProcessed={stats.TotalProcessed:N0}");
                 }
-                
-                Log($"[SERVER] Блок {blockId} завершен агентом {agentId} ({totalProcessed:N0} обработано)");
             }
+            // Немедленно обновляем UI
+            OnStatsUpdate?.Invoke(GetCurrentStats());
         }
         
         private async Task MonitorAgentsAsync(CancellationToken token)
@@ -1164,13 +1462,22 @@ namespace BitcoinFinder
             {
                 try
                 {
+                    // Вычисляем общее количество обработанных комбинаций (сервер + агенты)
+                    long totalProcessedCombinations = totalProcessed;
+                    
+                    // Добавляем статистику от всех агентов
+                    foreach (var agentStat in agentStats.Values)
+                    {
+                        totalProcessedCombinations += agentStat.TotalProcessed;
+                    }
+                    
                     var stats = new ServerStats
                     {
                         ConnectedAgents = connectedAgents.Count,
                         PendingBlocks = pendingBlocks.Count,
                         AssignedBlocks = assignedBlocks.Count,
                         CompletedBlocks = completedBlocks,
-                        TotalProcessed = totalProcessed,
+                        TotalProcessed = totalProcessedCombinations, // Общее количество (сервер + агенты)
                         TotalCombinations = totalCombinations,
                         FoundResults = foundResults.Count,
                         Uptime = DateTime.Now - searchStartTime,
@@ -1195,6 +1502,7 @@ namespace BitcoinFinder
         private void Log(string message)
         {
             var logMessage = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}";
+            // Logger.LogServer(message); // Закомментировано для уменьшения мусора в логах
             Console.WriteLine(logMessage);
             OnLog?.Invoke(logMessage);
         }
@@ -1203,18 +1511,52 @@ namespace BitcoinFinder
         
         public ServerStats GetCurrentStats()
         {
+            // Вычисляем общее количество обработанных комбинаций (сервер + агенты)
+            long totalProcessedCombinations = totalProcessed;
+            
+            // Добавляем статистику от всех агентов
+            foreach (var agentStat in agentStats.Values)
+            {
+                totalProcessedCombinations += agentStat.TotalProcessed;
+            }
+            
             return new ServerStats
             {
                 ConnectedAgents = connectedAgents.Count,
                 PendingBlocks = pendingBlocks.Count,
                 AssignedBlocks = assignedBlocks.Count,
                 CompletedBlocks = completedBlocks,
-                TotalProcessed = totalProcessed,
+                TotalProcessed = totalProcessedCombinations, // Общее количество (сервер + агенты)
                 TotalCombinations = totalCombinations,
                 FoundResults = foundResults.Count,
                 Uptime = DateTime.Now - searchStartTime,
                 AgentStats = agentStats.Values.ToList()
             };
+        }
+
+        // Вспомогательные методы для извлечения значений из JsonElement
+        private int GetInt32Value(object value)
+        {
+            if (value is System.Text.Json.JsonElement je) return je.GetInt32();
+            if (value is int i) return i;
+            if (value is long l) return (int)l;
+            return Convert.ToInt32(value);
+        }
+        private long GetInt64Value(object value)
+        {
+            if (value is System.Text.Json.JsonElement je) return je.GetInt64();
+            if (value is long l) return l;
+            if (value is int i) return i;
+            return Convert.ToInt64(value);
+        }
+        private double GetDoubleValue(object value)
+        {
+            if (value is System.Text.Json.JsonElement je) return je.GetDouble();
+            if (value is double d) return d;
+            if (value is float f) return f;
+            if (value is int i) return i;
+            if (value is long l) return l;
+            return Convert.ToDouble(value);
         }
     }
 
