@@ -1,11 +1,11 @@
 {
-  "SeedPhrase": "",
-  "BitcoinAddress": "",
+  "Timestamp": "2025-07-11T13:48:06.1806369+08:00",
+  "CurrentIndex": 31689,
+  "TotalCombinations": 9223372036854775,
+  "LastCheckedPhrase": "keen acid abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
+  "SeedPhrase": "\u0411\u0443\u0434\u0435\u0442 \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u043E \u043E\u0442 \u0441\u0435\u0440\u0432\u0435\u0440\u0430",
+  "BitcoinAddress": "\u0411\u0443\u0434\u0435\u0442 \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u043E \u043E\u0442 \u0441\u0435\u0440\u0432\u0435\u0440\u0430",
   "WordCount": 12,
-  "FullSearch": true,
-  "ThreadCount": 1,
-  "Timestamp": "2025-07-10T22:57:01.2483847+08:00",
-  "CurrentCombination": "0",
-  "TotalCombinations": "1000000",
-  "LastCheckedPhrase": ""
+  "FullSearch": false,
+  "ThreadCount": 4
 }

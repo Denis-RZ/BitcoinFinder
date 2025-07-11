@@ -12,7 +12,17 @@ using ProtoBlockTask = BitcoinFinder.Distributed.BlockTask;
 
 namespace BitcoinFinder
 {
-    public class DistributedAgentClient
+    public enum AgentState
+    {
+        Disconnected,
+        Connecting,
+        Connected,
+        Registered,
+        Working,
+        Error
+    }
+
+    public class DistributedAgentClient : IDisposable
     {
         public string ServerIp { get; set; } = "127.0.0.1";
         public int ServerPort { get; set; } = 5000;
@@ -21,6 +31,9 @@ namespace BitcoinFinder
         public Action<string>? OnLog { get; set; }
         public Action<long>? OnProgress { get; set; }
         public Action<string>? OnFound { get; set; }
+        public Action<AgentState>? OnStateChanged { get; set; }
+        
+        public AgentState State { get; private set; } = AgentState.Disconnected;
 
         private TcpClient? _client;
         private StreamReader? _reader;
@@ -108,22 +121,41 @@ namespace BitcoinFinder
         // ===== New protocol helper methods =====
         public async Task<bool> ConnectToServer(string ip, int port, CancellationToken token = default)
         {
-            ServerIp = ip;
-            ServerPort = port;
             try
             {
-                _client?.Dispose();
+                SetState(AgentState.Connecting);
+                ServerIp = ip;
+                ServerPort = port;
+
+                await DisconnectAsync();
+
                 _client = new TcpClient();
-                await _client.ConnectAsync(ip, port, token);
+                _client.ReceiveTimeout = 60000;
+                _client.SendTimeout = 30000;
+                _client.NoDelay = true;
+
+                var connectTask = _client.ConnectAsync(ip, port);
+                var timeoutTask = Task.Delay(15000, token);
+
+                var completedTask = await Task.WhenAny(connectTask, timeoutTask);
+                if (completedTask == timeoutTask || !_client.Connected)
+                {
+                    throw new TimeoutException($"Таймаут подключения к {ip}:{port}");
+                }
+
                 var stream = _client.GetStream();
                 _reader = new StreamReader(stream, Encoding.UTF8);
                 _writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
-                Log($"[AGENT] Connected to server {ip}:{port}");
+
+                SetState(AgentState.Connected);
+                Log($"Подключено к серверу {ip}:{port}");
                 return true;
             }
             catch (Exception ex)
             {
-                Log($"[AGENT] Connection error: {ex.Message}");
+                SetState(AgentState.Error);
+                Log($"Ошибка подключения: {ex.Message}");
+                await DisconnectAsync();
                 return false;
             }
         }
@@ -224,10 +256,302 @@ namespace BitcoinFinder
             }
             Log($"[AGENT] Completed block {task.BlockId}");
         }
+
+        public async Task<bool> RegisterAgent(string agentId, CancellationToken token = default)
+        {
+            if (State != AgentState.Connected) return false;
+
+            try
+            {
+                var registerMessage = new ProtoMessage
+                {
+                    Type = MessageType.AGENT_REGISTER,
+                    AgentId = agentId,
+                    Data = JsonSerializer.SerializeToElement(new
+                    {
+                        version = "2.0",
+                        capabilities = new[] { "SEARCH", "PROGRESS_REPORT", "HEARTBEAT" },
+                        machineName = Environment.MachineName,
+                        processorCount = Environment.ProcessorCount
+                    }),
+                    Timestamp = DateTime.UtcNow
+                };
+
+                await SendMessage(registerMessage);
+                var response = await ReceiveMessage(token);
+
+                if (response?.Type == MessageType.AGENT_REGISTER)
+                {
+                    SetState(AgentState.Registered);
+                    Log($"Агент {agentId} зарегистрирован успешно");
+                    return true;
+                }
+                else
+                {
+                    Log($"Сервер отклонил регистрацию агента: {response?.Type}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка регистрации агента: {ex.Message}");
+                SetState(AgentState.Error);
+                return false;
+            }
+        }
+
+        public async Task<ProtoBlockTask?> RequestTask(string agentId, CancellationToken token = default)
+        {
+            if (State != AgentState.Registered && State != AgentState.Working) return null;
+
+            try
+            {
+                var requestMessage = new ProtoMessage
+                {
+                    Type = MessageType.AGENT_REQUEST_TASK,
+                    AgentId = agentId,
+                    Timestamp = DateTime.UtcNow
+                };
+
+                await SendMessage(requestMessage);
+                var response = await ReceiveMessage(token);
+
+                if (response?.Type == MessageType.SERVER_TASK_ASSIGNED && response.Data.HasValue)
+                {
+                    var task = response.Data.Value.Deserialize<ProtoBlockTask>();
+                    if (task != null)
+                    {
+                        SetState(AgentState.Working);
+                        Log($"Получено задание: блок {task.BlockId} ({task.StartIndex}-{task.EndIndex})");
+                        return task;
+                    }
+                }
+                else if (response?.Type == MessageType.SERVER_NO_TASKS)
+                {
+                    Log("Нет доступных заданий");
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка запроса задания: {ex.Message}");
+                SetState(AgentState.Error);
+                return null;
+            }
+        }
+
+        public async Task<bool> ProcessTaskWithProgress(ProtoBlockTask task, string targetAddress, CancellationToken token = default)
+        {
+            if (State != AgentState.Working) return false;
+
+            try
+            {
+                Log($"Начинаем обработку блока {task.BlockId}");
+                
+                var finder = new AdvancedSeedPhraseFinder();
+                var bip39Words = finder.GetBip39Words();
+                
+                long processed = 0;
+                long reportInterval = Math.Max(ProgressReportInterval, 1000);
+                var startTime = DateTime.Now;
+                var lastReportTime = DateTime.Now;
+
+                for (long i = task.StartIndex; i <= task.EndIndex && !token.IsCancellationRequested; i++)
+                {
+                    try
+                    {
+                        // Генерируем seed-фразу по индексу
+                        var seedPhrase = GenerateSeedPhraseByIndex(i, bip39Words, 12);
+                        
+                        // Проверяем валидность
+                        if (finder.IsValidSeedPhrase(seedPhrase))
+                        {
+                            var generatedAddress = finder.GenerateBitcoinAddress(seedPhrase);
+                            if (generatedAddress == targetAddress)
+                            {
+                                // Найдено совпадение!
+                                var result = $"Блок {task.BlockId}, индекс {i}: {seedPhrase}";
+                                OnFound?.Invoke(result);
+                                
+                                await ReportFound(task.BlockId, seedPhrase, generatedAddress, i);
+                                Log($"*** НАЙДЕНО СОВПАДЕНИЕ *** {result}");
+                            }
+                        }
+
+                        processed++;
+                        OnProgress?.Invoke(processed);
+
+                        // Отчет о прогрессе
+                        if (processed % reportInterval == 0 || (DateTime.Now - lastReportTime).TotalSeconds > 30)
+                        {
+                            var rate = processed / Math.Max((DateTime.Now - startTime).TotalSeconds, 1);
+                            await ReportProgress(task.BlockId, i, processed, rate);
+                            lastReportTime = DateTime.Now;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"Ошибка обработки индекса {i}: {ex.Message}");
+                    }
+                }
+
+                // Отчет о завершении
+                await ReportTaskCompleted(task.BlockId, processed);
+                Log($"Блок {task.BlockId} обработан полностью ({processed:N0} комбинаций)");
+                
+                SetState(AgentState.Registered); // Возвращаемся в состояние ожидания заданий
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                Log($"Обработка блока {task.BlockId} отменена");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка обработки блока {task.BlockId}: {ex.Message}");
+                SetState(AgentState.Error);
+                return false;
+            }
+        }
+
+        private void SetState(AgentState newState)
+        {
+            if (State != newState)
+            {
+                State = newState;
+                OnStateChanged?.Invoke(newState);
+            }
+        }
+
+        private async Task ReportProgress(int blockId, long currentIndex, long processed, double rate)
+        {
+            try
+            {
+                var progressMessage = new ProtoMessage
+                {
+                    Type = MessageType.AGENT_REPORT_PROGRESS,
+                    AgentId = Environment.MachineName,
+                    Data = JsonSerializer.SerializeToElement(new
+                    {
+                        blockId = blockId,
+                        currentIndex = currentIndex,
+                        processed = processed,
+                        rate = rate,
+                        timestamp = DateTime.UtcNow
+                    }),
+                    Timestamp = DateTime.UtcNow
+                };
+
+                await SendMessage(progressMessage);
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка отправки прогресса: {ex.Message}");
+            }
+        }
+
+        private async Task ReportFound(int blockId, string seedPhrase, string address, long index)
+        {
+            try
+            {
+                var foundMessage = new ProtoMessage
+                {
+                    Type = MessageType.AGENT_REPORT_RESULT,
+                    AgentId = Environment.MachineName,
+                    Data = JsonSerializer.SerializeToElement(new
+                    {
+                        blockId = blockId,
+                        seedPhrase = seedPhrase,
+                        address = address,
+                        index = index,
+                        foundAt = DateTime.UtcNow
+                    }),
+                    Timestamp = DateTime.UtcNow
+                };
+
+                await SendMessage(foundMessage);
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка отправки найденного результата: {ex.Message}");
+            }
+        }
+
+        private async Task ReportTaskCompleted(int blockId, long processed)
+        {
+            try
+            {
+                var completedMessage = new ProtoMessage
+                {
+                    Type = MessageType.AGENT_BLOCK_COMPLETED,
+                    AgentId = Environment.MachineName,
+                    Data = JsonSerializer.SerializeToElement(new
+                    {
+                        blockId = blockId,
+                        processed = processed,
+                        completedAt = DateTime.UtcNow
+                    }),
+                    Timestamp = DateTime.UtcNow
+                };
+
+                await SendMessage(completedMessage);
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка отправки завершения задания: {ex.Message}");
+            }
+        }
+
+        private string GenerateSeedPhraseByIndex(long index, List<string> words, int wordCount)
+        {
+            var result = new string[wordCount];
+            var tempIndex = index;
+
+            for (int i = 0; i < wordCount; i++)
+            {
+                result[i] = words[(int)(tempIndex % words.Count)];
+                tempIndex /= words.Count;
+            }
+
+            return string.Join(" ", result);
+        }
+
+        public async Task DisconnectAsync()
+        {
+            try
+            {
+                _writer?.Dispose();
+                _reader?.Dispose();
+                _client?.Close();
+                _client?.Dispose();
+
+                _writer = null;
+                _reader = null;
+                _client = null;
+
+                SetState(AgentState.Disconnected);
+                Log("Отключено от сервера");
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка отключения: {ex.Message}");
+            }
+        }
         private void Log(string msg)
         {
             OnLog?.Invoke(msg);
             Console.WriteLine(msg);
+        }
+        public void Dispose()
+        {
+            _writer?.Dispose();
+            _reader?.Dispose();
+            _client?.Dispose();
+            _writer = null;
+            _reader = null;
+            _client = null;
         }
         public class BlockTask
         {

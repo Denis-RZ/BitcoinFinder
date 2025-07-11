@@ -603,12 +603,12 @@ namespace BitcoinFinder
                         
                         var progressInfo = new ProgressInfo
                         {
-                            Current = currentCombination,
-                            Total = totalCombinations,
+                            Current = (long)Math.Min((double)currentCombination, long.MaxValue),
+                            Total = (long)Math.Min((double)totalCombinations, long.MaxValue),
                             Percentage = totalCombinations > 0 ? (double)(currentCombination * 100 / totalCombinations) : 0,
                             Status = $"Проверено: {currentCombination:N0} / {totalCombinations:N0} | Скорость: {rateStr}/сек | Текущая: {currentSeedPhrase}",
                             Rate = rate,
-                            Remaining = rate > 0 ? remaining : TimeSpan.Zero
+                            Remaining = rate > 0 ? (long)remaining.TotalSeconds : 0
                         };
                         
                         worker.ReportProgress(Math.Min(progress, 99), progressInfo);
@@ -792,8 +792,8 @@ namespace BitcoinFinder
                             currentPhrasesList.Add(currentSeedPhrase);
                         var progressInfo = new ProgressInfo
                         {
-                            Current = (long)currentCombination,
-                            Total = (long)totalCombinations,
+                            Current = (long)Math.Min((double)currentCombination, long.MaxValue),
+                            Total = (long)Math.Min((double)totalCombinations, long.MaxValue),
                             Percentage = totalCombinations > 0 ? (double)((double)currentCombination * 100 / (double)totalCombinations) : 0,
                             Status = $"Проверено: {currentCombination:N0} / {totalCombinations:N0} | Скорость: {speedStr}/сек | Текущая: {currentSeedPhrase}",
                             Rate = displaySpeed,
