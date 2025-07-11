@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using ILGPU;
 using ILGPU.Runtime;
 using NBitcoin;
+using BitcoinFinder;
 
 namespace BitcoinFinder
 {
@@ -14,16 +15,6 @@ namespace BitcoinFinder
         Task<SearchResult> SearchAsync(SearchParameters parameters, CancellationToken token);
         bool IsGpuAvailable { get; }
         string GetDeviceInfo();
-    }
-
-    public class SearchResult
-    {
-        public int CheckedCount { get; set; }
-        public string? FoundPhrase { get; set; }
-        public string? FoundPrivateKey { get; set; }
-        public string? FoundAddress { get; set; }
-        public long ProcessingTimeMs { get; set; }
-        public string DeviceUsed { get; set; } = "CPU";
     }
 
     public class GpuSeedPhrasePlugin : ISeedPhraseGpuSearcher

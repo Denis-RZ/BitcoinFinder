@@ -10,9 +10,23 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using NBitcoin;
+using BitcoinFinder;
 
 namespace BitcoinFinder
 {
+    public class ProgressData
+    {
+        public string SeedPhrase { get; set; } = "";
+        public string BitcoinAddress { get; set; } = "";
+        public int WordCount { get; set; } = 12;
+        public bool FullSearch { get; set; } = false;
+        public int ThreadCount { get; set; } = 1;
+        public string CurrentCombination { get; set; } = "0";
+        public string TotalCombinations { get; set; } = "0";
+        public DateTime Timestamp { get; set; } = DateTime.Now;
+        public string LastCheckedPhrase { get; set; } = "";
+    }
+
     public class AdvancedSeedPhraseFinder
     {
         private readonly List<string> bip39Words;
@@ -319,6 +333,11 @@ namespace BitcoinFinder
             {
                 var progressData = new ProgressData
                 {
+                    SeedPhrase = telemetrySeedPhrase,
+                    BitcoinAddress = telemetryBitcoinAddress,
+                    WordCount = telemetryWordCount,
+                    FullSearch = telemetryFullSearch,
+                    ThreadCount = telemetryThreadCount,
                     CurrentCombination = currentCombination.ToString(),
                     TotalCombinations = totalCombinations.ToString(),
                     Timestamp = DateTime.Now,
@@ -773,13 +792,13 @@ namespace BitcoinFinder
                             currentPhrasesList.Add(currentSeedPhrase);
                         var progressInfo = new ProgressInfo
                         {
-                            Current = currentCombination,
-                            Total = totalCombinations,
-                            Percentage = totalCombinations > 0 ? (double)(currentCombination * 100 / totalCombinations) : 0,
-                            Status = $"Проверено: {currentCombination:N0} / {totalCombinations:N0} | ~Скорость: {speedStr}/сек | ~Осталось: {(displaySpeed > 0 ? remaining.ToString() : "-")}",
+                            Current = (long)currentCombination,
+                            Total = (long)totalCombinations,
+                            Percentage = totalCombinations > 0 ? (double)((double)currentCombination * 100 / (double)totalCombinations) : 0,
+                            Status = $"Проверено: {currentCombination:N0} / {totalCombinations:N0} | Скорость: {speedStr}/сек | Текущая: {currentSeedPhrase}",
                             Rate = displaySpeed,
-                            Remaining = displaySpeed > 0 ? remaining : TimeSpan.Zero,
-                            CurrentPhrases = currentPhrasesList, // только seed-фразы
+                            Remaining = displaySpeed > 0 ? (long)(totalCombinations - currentCombination) : 0,
+                            CurrentPhrases = string.Join(" ", currentPhrasesList), // только seed-фразы
                             CurrentPrivateKey = wif // приватный ключ для верхней строки
                         };
                         
@@ -1363,5 +1382,97 @@ namespace BitcoinFinder
 
         // Публичный геттер для BIP39-словаря
         public List<string> GetBip39Words() => bip39Words;
+        
+        /// <summary>
+        /// Поиск в заданном диапазоне индексов (для агентского режима)
+        /// </summary>
+        public async Task<SearchResult> SearchInRangeAsync(string targetAddress, int wordCount, long startIndex, long endIndex, CancellationToken cancellationToken)
+        {
+            try
+            {
+                LogMessage($"Поиск в диапазоне: {startIndex:N0} - {endIndex:N0}");
+                
+                // Генерируем все возможные слова для полного поиска
+                var possibleWords = new List<string>[wordCount];
+                for (int i = 0; i < wordCount; i++)
+                {
+                    possibleWords[i] = new List<string>(bip39Words);
+                }
+                
+                var currentIndex = startIndex;
+                
+                while (currentIndex < endIndex && !cancellationToken.IsCancellationRequested)
+                {
+                    try
+                    {
+                        // Генерируем комбинацию по индексу
+                        var combination = GenerateCombinationByIndex(currentIndex, possibleWords);
+                        var seedPhrase = string.Join(" ", combination);
+                        
+                        // Проверяем валидность seed-фразы
+                        if (!IsValidSeedPhrase(seedPhrase))
+                        {
+                            currentIndex++;
+                            continue;
+                        }
+                        
+                        // Генерируем Bitcoin адрес
+                        var generatedAddress = GenerateBitcoinAddress(seedPhrase);
+                        
+                        // Проверяем совпадение
+                        if (generatedAddress.Equals(targetAddress, StringComparison.OrdinalIgnoreCase))
+                        {
+                            // НАЙДЕНО!
+                            var mnemonic = new Mnemonic(seedPhrase, Wordlist.English);
+                            var seed = mnemonic.DeriveSeed();
+                            var masterKey = ExtKey.CreateFromSeed(seed);
+                            var fullPath = new KeyPath("44'/0'/0'/0/0");
+                            var privateKey = masterKey.Derive(fullPath).PrivateKey;
+                            
+                            LogMessage($"НАЙДЕНО! Индекс: {currentIndex:N0}, Seed: {seedPhrase}");
+                            
+                            return new SearchResult
+                            {
+                                Found = true,
+                                SeedPhrase = seedPhrase,
+                                PrivateKey = privateKey.GetWif(Network.Main).ToString(),
+                                BitcoinAddress = generatedAddress,
+                                FoundAtIndex = currentIndex
+                            };
+                        }
+                        
+                        currentIndex++;
+                        
+                        // Небольшая пауза для предотвращения блокировки UI
+                        if (currentIndex % 1000 == 0)
+                        {
+                            await Task.Delay(1, cancellationToken);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogMessage($"Ошибка при проверке индекса {currentIndex}: {ex.Message}");
+                        currentIndex++;
+                    }
+                }
+                
+                // Совпадение не найдено
+                return new SearchResult
+                {
+                    Found = false,
+                    ProcessedCount = endIndex - startIndex
+                };
+            }
+            catch (OperationCanceledException)
+            {
+                LogMessage("Поиск прерван");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                LogMessage($"Ошибка поиска в диапазоне: {ex.Message}");
+                throw;
+            }
+        }
     }
 } 

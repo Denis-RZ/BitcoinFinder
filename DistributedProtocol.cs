@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BitcoinFinder;
 
 namespace BitcoinFinder.Distributed
 {
@@ -51,14 +52,5 @@ namespace BitcoinFinder.Distributed
         public int CurrentBlockId { get; set; }
         public double Speed { get; set; }
         public DateTime LastHeartbeat { get; set; }
-    }
-
-    public class SearchResult
-    {
-        public string SeedPhrase { get; set; } = string.Empty;
-        public string BitcoinAddress { get; set; } = string.Empty;
-        public long FoundAt { get; set; }
-        public string FoundByAgent { get; set; } = string.Empty;
-        public int BlockId { get; set; }
     }
 }

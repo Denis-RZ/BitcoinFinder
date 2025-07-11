@@ -4,6 +4,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Net;
+using System.Net.Sockets;
+using System.Net.NetworkInformation; // Added for NetworkInterface
+using System.Collections.Generic; // Added for List
 
 namespace BitcoinFinder
 {
@@ -27,6 +31,7 @@ namespace BitcoinFinder
         private Label lblStats;
         private ListBox lstFoundResults;
         private ProgressBar progressBar;
+        private Label lblServerIp;
 
         public ServerForm()
         {
@@ -44,128 +49,172 @@ namespace BitcoinFinder
             lblStats = new Label();
             lstFoundResults = new ListBox();
             progressBar = new ProgressBar();
+            lblServerIp = new Label();
             statsTimer = new System.Windows.Forms.Timer();
             
+            Program.LoadConfig(); // Явная загрузка конфига
             InitializeComponent();
             SetupStatsTimer();
             LoadServerConfig();
+            // Показываем IP сразу при запуске формы
+            string serverIp = GetLocalIPAddress();
+            int port = Program.Config.Server.Port;
+            lblServerIp.Text = $"🌐 IP для агентов: {serverIp}:{port}";
+            lblServerIp.ForeColor = Color.DarkGreen;
+            this.FormClosing += ServerForm_FormClosing;
         }
 
         private void InitializeComponent()
         {
-            this.Size = new Size(1200, 800);
+            this.Size = new Size(1400, 900);
             this.Text = "Bitcoin Finder - Distributed Server";
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.MinimumSize = new Size(1000, 600);
+            this.MinimumSize = new Size(1200, 700);
 
-            // Главная разметка
+            // === ГЛАВНАЯ РАЗМЕТКА ===
             var mainLayout = new TableLayoutPanel();
             mainLayout.Dock = DockStyle.Fill;
             mainLayout.ColumnCount = 2;
-            mainLayout.RowCount = 3;
+            mainLayout.RowCount = 4;
             
-            // Столбцы: 40% левый, 60% правый
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60F));
+            // Столбцы: 35% левый, 65% правый
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35F));
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65F));
             
-            // Строки: конфигурация, агенты, логи
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 30F));
+            // Строки: заголовок, конфигурация, агенты/прогресс, логи
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80F)); // Заголовок с IP
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 30F)); // Конфигурация
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 40F)); // Агенты и прогресс
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 30F)); // Логи
+
+            // === ЗАГОЛОВОК С IP АДРЕСОМ ===
+            var headerPanel = new Panel();
+            headerPanel.Dock = DockStyle.Fill;
+            headerPanel.BackColor = Color.FromArgb(240, 248, 255); // AliceBlue
+            headerPanel.BorderStyle = BorderStyle.FixedSingle;
+
+            var headerLayout = new TableLayoutPanel();
+            headerLayout.Dock = DockStyle.Fill;
+            headerLayout.ColumnCount = 2;
+            headerLayout.RowCount = 2;
+            headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+
+            // Заголовок сервера
+            var lblServerTitle = new Label();
+            lblServerTitle.Text = "🖥️ Bitcoin Finder Server";
+            lblServerTitle.Font = new Font("Segoe UI", 16F, FontStyle.Bold);
+            lblServerTitle.ForeColor = Color.DarkBlue;
+            lblServerTitle.TextAlign = ContentAlignment.MiddleLeft;
+            lblServerTitle.Dock = DockStyle.Fill;
+            headerLayout.Controls.Add(lblServerTitle, 0, 0);
+
+            // IP адрес сервера (ВАЖНО!)
+            lblServerIp = new Label();
+            lblServerIp.Text = "🌐 IP для агентов: Определяется...";
+            lblServerIp.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
+            lblServerIp.ForeColor = Color.DarkGreen;
+            lblServerIp.TextAlign = ContentAlignment.MiddleRight;
+            lblServerIp.Dock = DockStyle.Fill;
+            lblServerIp.AutoSize = false;
+            headerLayout.Controls.Add(lblServerIp, 1, 0);
+
+            // Статус сервера
+            lblServerStatus = new Label();
+            lblServerStatus.Text = "🔴 Статус: Остановлен";
+            lblServerStatus.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
+            lblServerStatus.ForeColor = Color.Red;
+            lblServerStatus.TextAlign = ContentAlignment.MiddleLeft;
+            lblServerStatus.Dock = DockStyle.Fill;
+            headerLayout.Controls.Add(lblServerStatus, 0, 1);
+
+            // Кнопки управления (в одной строке)
+            var buttonPanel = new FlowLayoutPanel();
+            buttonPanel.Dock = DockStyle.Fill;
+            buttonPanel.FlowDirection = FlowDirection.LeftToRight;
+            buttonPanel.WrapContents = false;
+
+            btnStartServer = new Button();
+            btnStartServer.Text = "▶️ Запустить сервер";
+            btnStartServer.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            btnStartServer.BackColor = Color.LightGreen;
+            btnStartServer.ForeColor = Color.DarkGreen;
+            btnStartServer.Size = new Size(150, 35);
+            btnStartServer.FlatStyle = FlatStyle.Flat;
+            btnStartServer.Click += BtnStartServer_Click;
+            buttonPanel.Controls.Add(btnStartServer);
+
+            btnStopServer = new Button();
+            btnStopServer.Text = "⏹️ Остановить сервер";
+            btnStopServer.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            btnStopServer.BackColor = Color.LightCoral;
+            btnStopServer.ForeColor = Color.DarkRed;
+            btnStopServer.Size = new Size(150, 35);
+            btnStopServer.Enabled = false;
+            btnStopServer.FlatStyle = FlatStyle.Flat;
+            btnStopServer.Click += BtnStopServer_Click;
+            buttonPanel.Controls.Add(btnStopServer);
+
+            headerLayout.Controls.Add(buttonPanel, 1, 1);
+            headerPanel.Controls.Add(headerLayout);
+            mainLayout.Controls.Add(headerPanel, 0, 0);
+            mainLayout.SetColumnSpan(headerPanel, 2);
 
             // === КОНФИГУРАЦИЯ СЕРВЕРА ===
             var configGroup = new GroupBox();
-            configGroup.Text = "Конфигурация сервера";
+            configGroup.Text = "⚙️ Конфигурация сервера";
             configGroup.Dock = DockStyle.Fill;
             configGroup.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
 
             var configLayout = new TableLayoutPanel();
             configLayout.Dock = DockStyle.Fill;
             configLayout.ColumnCount = 2;
-            configLayout.RowCount = 9; // Увеличиваем на 1 для поля "Потоков сервера"
+            configLayout.RowCount = 6;
             configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            configLayout.Padding = new Padding(10);
 
             // Порт сервера
-            configLayout.Controls.Add(new Label { Text = "Порт:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 0);
+            configLayout.Controls.Add(new Label { Text = "🔌 Порт:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 0);
             txtPort = new TextBox { Text = "5000", Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
             configLayout.Controls.Add(txtPort, 1, 0);
 
             // Bitcoin адрес
-            configLayout.Controls.Add(new Label { Text = "Bitcoin адрес:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 1);
+            configLayout.Controls.Add(new Label { Text = "₿ Bitcoin адрес:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 1);
             txtBitcoinAddress = new TextBox { Text = "1MCirzugBCrn5H6jHix6PJSLX7EqUEniBQ", Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
             configLayout.Controls.Add(txtBitcoinAddress, 1, 1);
 
             // Количество слов
-            configLayout.Controls.Add(new Label { Text = "Количество слов:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 2);
+            configLayout.Controls.Add(new Label { Text = "📝 Количество слов:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 2);
             numWordCount = new NumericUpDown { Value = 12, Minimum = 12, Maximum = 24, Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
             configLayout.Controls.Add(numWordCount, 1, 2);
 
             // Размер блока
-            configLayout.Controls.Add(new Label { Text = "Размер блока:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 3);
+            configLayout.Controls.Add(new Label { Text = "📦 Размер блока:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 3);
             txtBlockSize = new TextBox { Text = "100000", Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
             configLayout.Controls.Add(txtBlockSize, 1, 3);
 
-            // NEW: Потоков сервера
-            configLayout.Controls.Add(new Label { Text = "Потоков сервера:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 4);
+            // Потоков сервера
+            configLayout.Controls.Add(new Label { Text = "⚡ Потоков сервера:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 4);
             numServerThreads = new NumericUpDown { Value = 2, Minimum = 0, Maximum = 16, Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
             configLayout.Controls.Add(numServerThreads, 1, 4);
 
-            // Кнопки управления
-            btnStartServer = new Button 
-            { 
-                Text = "Запустить сервер", 
-                Font = new Font("Segoe UI", 11F, FontStyle.Bold), 
-                BackColor = Color.LightGreen,
-                Height = 40,
-                Dock = DockStyle.Fill
-            };
-            btnStartServer.Click += BtnStartServer_Click;
-            configLayout.Controls.Add(btnStartServer, 0, 5);
-            configLayout.SetColumnSpan(btnStartServer, 2);
-
-            btnStopServer = new Button 
-            { 
-                Text = "Остановить сервер", 
-                Font = new Font("Segoe UI", 11F, FontStyle.Bold), 
-                BackColor = Color.LightCoral,
-                Height = 40,
-                Enabled = false,
-                Dock = DockStyle.Fill
-            };
-            btnStopServer.Click += BtnStopServer_Click;
-            configLayout.Controls.Add(btnStopServer, 0, 6);
-            configLayout.SetColumnSpan(btnStopServer, 2);
-
-            // Статус сервера
-            lblServerStatus = new Label 
-            { 
-                Text = "Статус: Остановлен", 
-                Font = new Font("Segoe UI", 12F, FontStyle.Bold), 
-                ForeColor = Color.Red,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter
-            };
-            configLayout.Controls.Add(lblServerStatus, 0, 7);
-            configLayout.SetColumnSpan(lblServerStatus, 2);
-
             // Статистика
-            lblStats = new Label 
-            { 
-                Text = "Агентов: 0 | Блоков: 0 | Обработано: 0",
-                Font = new Font("Segoe UI", 10F),
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter
-            };
-            configLayout.Controls.Add(lblStats, 0, 8);
+            lblStats = new Label();
+            lblStats.Text = "📊 Агентов: 0 | Блоков: 0 | Обработано: 0";
+            lblStats.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+            lblStats.ForeColor = Color.DarkBlue;
+            lblStats.Dock = DockStyle.Fill;
+            lblStats.TextAlign = ContentAlignment.MiddleCenter;
+            configLayout.Controls.Add(lblStats, 0, 5);
             configLayout.SetColumnSpan(lblStats, 2);
 
             configGroup.Controls.Add(configLayout);
-            mainLayout.Controls.Add(configGroup, 0, 0);
+            mainLayout.Controls.Add(configGroup, 0, 1);
 
             // === НАЙДЕННЫЕ РЕЗУЛЬТАТЫ ===
             var resultsGroup = new GroupBox();
-            resultsGroup.Text = "Найденные результаты";
+            resultsGroup.Text = "🎯 Найденные результаты";
             resultsGroup.Dock = DockStyle.Fill;
             resultsGroup.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
 
@@ -173,13 +222,15 @@ namespace BitcoinFinder
             lstFoundResults.Dock = DockStyle.Fill;
             lstFoundResults.Font = new Font("Consolas", 9F);
             lstFoundResults.HorizontalScrollbar = true;
+            lstFoundResults.BackColor = Color.Black;
+            lstFoundResults.ForeColor = Color.Yellow;
             resultsGroup.Controls.Add(lstFoundResults);
             
-            mainLayout.Controls.Add(resultsGroup, 1, 0);
+            mainLayout.Controls.Add(resultsGroup, 1, 1);
 
             // === ПОДКЛЮЧЕННЫЕ АГЕНТЫ ===
             var agentsGroup = new GroupBox();
-            agentsGroup.Text = "Подключенные агенты";
+            agentsGroup.Text = "🤖 Подключенные агенты";
             agentsGroup.Dock = DockStyle.Fill;
             agentsGroup.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
 
@@ -190,6 +241,8 @@ namespace BitcoinFinder
             dgvAgents.AllowUserToDeleteRows = false;
             dgvAgents.ReadOnly = true;
             dgvAgents.Font = new Font("Segoe UI", 9F);
+            dgvAgents.BackgroundColor = Color.White;
+            dgvAgents.GridColor = Color.LightGray;
             
             // Колонки для агентов
             dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "AgentId", HeaderText = "ID Агента", Width = 150 });
@@ -199,11 +252,11 @@ namespace BitcoinFinder
             dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "LastUpdate", HeaderText = "Последняя активность", Width = 150 });
 
             agentsGroup.Controls.Add(dgvAgents);
-            mainLayout.Controls.Add(agentsGroup, 0, 1);
+            mainLayout.Controls.Add(agentsGroup, 0, 2);
 
             // === ПРОГРЕСС ===
             var progressGroup = new GroupBox();
-            progressGroup.Text = "Общий прогресс";
+            progressGroup.Text = "📈 Общий прогресс";
             progressGroup.Dock = DockStyle.Fill;
             progressGroup.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
 
@@ -216,17 +269,23 @@ namespace BitcoinFinder
             progressBar = new ProgressBar();
             progressBar.Dock = DockStyle.Fill;
             progressBar.Height = 30;
+            progressBar.Style = ProgressBarStyle.Continuous;
             progressLayout.Controls.Add(progressBar, 0, 0);
 
-            var progressLabel = new Label { Text = "0%", Font = new Font("Segoe UI", 14F), TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill };
+            var progressLabel = new Label();
+            progressLabel.Text = "0%";
+            progressLabel.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
+            progressLabel.TextAlign = ContentAlignment.MiddleCenter;
+            progressLabel.Dock = DockStyle.Fill;
+            progressLabel.ForeColor = Color.DarkBlue;
             progressLayout.Controls.Add(progressLabel, 0, 1);
 
             progressGroup.Controls.Add(progressLayout);
-            mainLayout.Controls.Add(progressGroup, 1, 1);
+            mainLayout.Controls.Add(progressGroup, 1, 2);
 
             // === ЛОГ СЕРВЕРА ===
             var logGroup = new GroupBox();
-            logGroup.Text = "Лог сервера";
+            logGroup.Text = "📋 Лог сервера";
             logGroup.Dock = DockStyle.Fill;
             logGroup.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
 
@@ -240,13 +299,10 @@ namespace BitcoinFinder
             txtServerLog.ForeColor = Color.LightGreen;
 
             logGroup.Controls.Add(txtServerLog);
-            mainLayout.Controls.Add(logGroup, 0, 2);
+            mainLayout.Controls.Add(logGroup, 0, 3);
             mainLayout.SetColumnSpan(logGroup, 2);
 
             Controls.Add(mainLayout);
-
-            // Обработчик закрытия формы
-            this.FormClosing += ServerForm_FormClosing;
         }
 
         private void SetupStatsTimer()
@@ -321,8 +377,13 @@ namespace BitcoinFinder
                 isServerRunning = true;
                 btnStartServer.Enabled = false;
                 btnStopServer.Enabled = true;
-                lblServerStatus.Text = $"Статус: Запущен на порту {port}";
+                lblServerStatus.Text = $"🟢 Статус: Запущен на порту {port}";
                 lblServerStatus.ForeColor = Color.Green;
+                
+                // Определяем и отображаем IP адрес сервера
+                string serverIp = GetLocalIPAddress();
+                lblServerIp.Text = $"🌐 IP для агентов: {serverIp}:{port}";
+                lblServerIp.ForeColor = Color.Green;
                 
                 // Блокируем изменение параметров
                 txtPort.Enabled = false;
@@ -334,6 +395,7 @@ namespace BitcoinFinder
                 statsTimer.Start();
                 
                 AddLog($"Сервер запущен на порту {port}");
+                AddLog($"IP адрес сервера для агентов: {serverIp}:{port}");
                 AddLog($"Целевой адрес: {bitcoinAddress}");
                 AddLog($"Количество слов: {wordCount}");
                 AddLog($"Потоков сервера: {serverThreads} (0 = отключено)");
@@ -356,8 +418,13 @@ namespace BitcoinFinder
                 isServerRunning = false;
                 btnStartServer.Enabled = true;
                 btnStopServer.Enabled = false;
-                lblServerStatus.Text = "Статус: Остановлен";
+                lblServerStatus.Text = "🔴 Статус: Остановлен";
                 lblServerStatus.ForeColor = Color.Red;
+                // Показываем IP даже после остановки
+                string serverIp = GetLocalIPAddress();
+                int port = Program.Config.Server.Port;
+                lblServerIp.Text = $"🌐 IP для агентов: {serverIp}:{port}";
+                lblServerIp.ForeColor = Color.DarkGreen;
 
                 // Разблокируем параметры
                 txtPort.Enabled = true;
@@ -370,7 +437,7 @@ namespace BitcoinFinder
                 
                 // Очищаем данные
                 dgvAgents.Rows.Clear();
-                lblStats.Text = "Агентов: 0 | Блоков: 0 | Обработано: 0";
+                lblStats.Text = "📊 Агентов: 0 | Блоков: 0 | Обработано: 0";
                 progressBar.Value = 0;
 
                 AddLog("Сервер остановлен");
@@ -433,7 +500,7 @@ namespace BitcoinFinder
         private void UpdateStatsDisplay(ServerStats stats)
         {
             // Обновляем общую статистику
-            lblStats.Text = $"Агентов: {stats.ConnectedAgents} | " +
+            lblStats.Text = $"📊 Агентов: {stats.ConnectedAgents} | " +
                            $"Блоков (ожидает/назначено/завершено): {stats.PendingBlocks}/{stats.AssignedBlocks}/{stats.CompletedBlocks} | " +
                            $"Обработано: {stats.TotalProcessed:N0} | " +
                            $"Найдено: {stats.FoundResults}";
@@ -496,9 +563,9 @@ namespace BitcoinFinder
                     return;
                 }
             }
-            
-            // Сохраняем конфигурацию при закрытии
+            // Сохраняем конфиг при закрытии
             SaveServerConfig();
+            Program.SaveConfig(); // Явное сохранение
         }
         
         private void LoadServerConfig()
@@ -548,6 +615,40 @@ namespace BitcoinFinder
             catch (Exception ex)
             {
                 AddLog($"Ошибка сохранения конфигурации сервера: {ex.Message}");
+            }
+        }
+
+        private string GetLocalIPAddress()
+        {
+            try
+            {
+                var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces();
+                var ipList = new List<string>();
+                foreach (var networkInterface in networkInterfaces)
+                {
+                    if (networkInterface.OperationalStatus == OperationalStatus.Up &&
+                        (networkInterface.NetworkInterfaceType == NetworkInterfaceType.Ethernet ||
+                         networkInterface.NetworkInterfaceType == NetworkInterfaceType.Wireless80211))
+                    {
+                        var ipProperties = networkInterface.GetIPProperties();
+                        foreach (var ipAddress in ipProperties.UnicastAddresses)
+                        {
+                            if (ipAddress.Address.AddressFamily == AddressFamily.InterNetwork &&
+                                !IPAddress.IsLoopback(ipAddress.Address) &&
+                                !ipAddress.Address.ToString().StartsWith("169.254."))
+                            {
+                                ipList.Add(ipAddress.Address.ToString());
+                            }
+                        }
+                    }
+                }
+                if (ipList.Count > 0)
+                    return string.Join(", ", ipList);
+                return "127.0.0.1";
+            }
+            catch (Exception)
+            {
+                return "127.0.0.1";
             }
         }
     }
