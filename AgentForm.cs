@@ -606,10 +606,9 @@ namespace BitcoinFinder
                     AgentName = agentName,
                     Threads = threads
                 };
-                var json = JsonSerializer.Serialize(config, new JsonSerializerOptions 
-                { 
-                    WriteIndented = true,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                var json = JsonSerializer.Serialize(config, new JsonSerializerOptions
+                {
+                    WriteIndented = true
                 });
                 AddLog($"Сохранение конфигурации в файл: {Path.GetFullPath(ConfigFile)}");
                 AddLog($"JSON для сохранения: {json}");
@@ -671,7 +670,10 @@ namespace BitcoinFinder
                     var json = File.ReadAllText(ConfigFile);
                     AddLog($"Загрузка конфигурации из файла: {Path.GetFullPath(ConfigFile)}");
                     AddLog($"Содержимое файла: {json}");
-                    var config = JsonSerializer.Deserialize<AgentConfig>(json);
+                    var config = JsonSerializer.Deserialize<AgentConfig>(json, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
                     if (config != null)
                     {
                         if (!string.IsNullOrWhiteSpace(config.ServerIp) && IsValidIpAddress(config.ServerIp))
@@ -852,10 +854,9 @@ namespace BitcoinFinder
                     AgentName = agentName,
                     Threads = threads
                 };
-                var json = JsonSerializer.Serialize(config, new JsonSerializerOptions 
-                { 
-                    WriteIndented = true,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                var json = JsonSerializer.Serialize(config, new JsonSerializerOptions
+                {
+                    WriteIndented = true
                 });
                 
                 File.WriteAllText(ConfigFile, json);
