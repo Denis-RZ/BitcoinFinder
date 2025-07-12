@@ -1,0 +1,10 @@
+{
+  "Server": {
+    "Port": 5000,
+    "LastBitcoinAddress": "",
+    "LastWordCount": 12,
+    "BlockSize": 100000
+  },
+  "DefaultBitcoinAddress": "1MCirzugBCrn5H6jHix6PJSLX7EqUEniBQ",
+  "DefaultThreadCount": 4
+}

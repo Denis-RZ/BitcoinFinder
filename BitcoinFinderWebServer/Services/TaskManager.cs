@@ -28,10 +28,164 @@ namespace BitcoinFinderWebServer.Services
         private Task? _serverSearchTask;
         private CancellationTokenSource? _serverCts;
 
+        // Система сохранения состояния
+        private readonly ConcurrentDictionary<string, AgentState> _agentStates = new();
+        private readonly string _stateFile = "server_state.json";
+        private readonly string _agentStatesFile = "agent_states.json";
+        private readonly Timer _autoSaveTimer;
+        private readonly object _saveLock = new object();
+
         public TaskManager(SeedPhraseFinder seedPhraseFinder, ILogger<TaskManager> logger)
         {
             _seedPhraseFinder = seedPhraseFinder;
             _logger = logger;
+            
+            // Загружаем сохраненное состояние
+            LoadServerState();
+            LoadAgentStates();
+            
+            // Таймер автосохранения каждые 30 секунд
+            _autoSaveTimer = new Timer(SaveStateCallback, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+        }
+
+        private void SaveStateCallback(object? state)
+        {
+            try
+            {
+                SaveServerState();
+                SaveAgentStates();
+                _logger.LogDebug("Состояние сервера автоматически сохранено");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при автосохранении состояния");
+            }
+        }
+
+        private void SaveServerState()
+        {
+            lock (_saveLock)
+            {
+                try
+                {
+                    var serverState = new ServerState
+                    {
+                        LastSaveTime = DateTime.UtcNow,
+                        TotalProcessed = _totalProcessed,
+                        CompletedBlocksCount = _completedBlocks,
+                        TotalBlocks = _pendingBlocks.Count + _assignedBlocks.Count + _completedBlocks,
+                        LastProcessedIndex = GetLastProcessedIndex(),
+                        FoundResults = new List<string>(_foundResults),
+                        AgentStates = _agentStates.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+                        PendingBlocks = _pendingBlocks.ToList(),
+                        AssignedBlocks = _assignedBlocks.Values.ToList(),
+                        CompletedBlocks = GetCompletedBlocks()
+                    };
+
+                    var json = JsonSerializer.Serialize(serverState, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(_stateFile, json);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка сохранения состояния сервера");
+                }
+            }
+        }
+
+        private void LoadServerState()
+        {
+            try
+            {
+                if (File.Exists(_stateFile))
+                {
+                    var json = File.ReadAllText(_stateFile);
+                    var serverState = JsonSerializer.Deserialize<ServerState>(json);
+                    
+                    if (serverState != null)
+                    {
+                        _totalProcessed = serverState.TotalProcessed;
+                        _completedBlocks = serverState.CompletedBlocksCount;
+                        _foundResults.Clear();
+                        _foundResults.AddRange(serverState.FoundResults);
+                        
+                        // Восстанавливаем агентов
+                        foreach (var agentState in serverState.AgentStates)
+                        {
+                            _agentStates.TryAdd(agentState.Key, agentState.Value);
+                        }
+                        
+                        _logger.LogInformation($"Загружено состояние сервера: {_totalProcessed:N0} обработано, {_completedBlocks} блоков завершено");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка загрузки состояния сервера");
+            }
+        }
+
+        private void SaveAgentStates()
+        {
+            lock (_saveLock)
+            {
+                try
+                {
+                    var agentStates = _agentStates.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+                    var json = JsonSerializer.Serialize(agentStates, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(_agentStatesFile, json);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка сохранения состояний агентов");
+                }
+            }
+        }
+
+        private void LoadAgentStates()
+        {
+            try
+            {
+                if (File.Exists(_agentStatesFile))
+                {
+                    var json = File.ReadAllText(_agentStatesFile);
+                    var agentStates = JsonSerializer.Deserialize<Dictionary<string, AgentState>>(json);
+                    
+                    if (agentStates != null)
+                    {
+                        foreach (var agentState in agentStates)
+                        {
+                            _agentStates.TryAdd(agentState.Key, agentState.Value);
+                        }
+                        
+                        _logger.LogInformation($"Загружены состояния {agentStates.Count} агентов");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка загрузки состояний агентов");
+            }
+        }
+
+        private long GetLastProcessedIndex()
+        {
+            var lastIndex = 0L;
+            foreach (var block in _assignedBlocks.Values)
+            {
+                if (block.CurrentIndex > lastIndex)
+                    lastIndex = block.CurrentIndex;
+            }
+            return lastIndex;
+        }
+
+        private List<SearchBlock> GetCompletedBlocks()
+        {
+            // Возвращаем только последние 100 завершенных блоков для экономии памяти
+            return _assignedBlocks.Values
+                .Where(b => b.Status == BlockStatus.Completed)
+                .OrderByDescending(b => b.CompletedAt)
+                .Take(100)
+                .ToList();
         }
 
         public async Task<SearchTask> CreateTaskAsync(string name, SearchParameters parameters)
@@ -114,20 +268,79 @@ namespace BitcoinFinderWebServer.Services
 
         public async Task<SearchBlock?> GetNextBlockAsync(string agentName)
         {
-            if (_pendingBlocks.TryDequeue(out var block))
+            // Проверяем, есть ли у агента незавершенный блок
+            var agentState = GetOrCreateAgentState(agentName);
+            if (agentState.LastBlockId.HasValue && agentState.LastIndex.HasValue)
             {
-                block.Status = BlockStatus.Assigned;
-                block.AssignedTo = agentName;
-                block.AssignedAt = DateTime.UtcNow;
-                block.CurrentIndex = block.StartIndex;
+                // Агент переподключился, возвращаем его последний блок
+                if (_assignedBlocks.TryGetValue(agentState.LastBlockId.Value, out var lastBlock))
+                {
+                    if (lastBlock.AssignedTo == agentName && lastBlock.Status == BlockStatus.Assigned)
+                    {
+                        _logger.LogInformation($"Агент {agentName} продолжает работу с блока {lastBlock.BlockId} с индекса {agentState.LastIndex.Value}");
+                        return lastBlock;
+                    }
+                }
+            }
 
-                _assignedBlocks.TryAdd(block.BlockId, block);
+            // Выдаем следующий блок по приоритету
+            var nextBlock = GetNextBlockByPriority();
+            if (nextBlock != null)
+            {
+                nextBlock.Status = BlockStatus.Assigned;
+                nextBlock.AssignedTo = agentName;
+                nextBlock.AssignedAt = DateTime.UtcNow;
+                nextBlock.CurrentIndex = nextBlock.StartIndex;
 
-                _logger.LogInformation($"Блок {block.BlockId} назначен агенту {agentName}");
-                return await System.Threading.Tasks.Task.FromResult(block);
+                _assignedBlocks.TryAdd(nextBlock.BlockId, nextBlock);
+
+                // Обновляем состояние агента
+                agentState.LastBlockId = nextBlock.BlockId;
+                agentState.LastIndex = nextBlock.StartIndex;
+                agentState.LastSeen = DateTime.UtcNow;
+                agentState.IsConnected = true;
+
+                _logger.LogInformation($"Блок {nextBlock.BlockId} назначен агенту {agentName}");
+                return await System.Threading.Tasks.Task.FromResult(nextBlock);
             }
 
             return null;
+        }
+
+        private SearchBlock? GetNextBlockByPriority()
+        {
+            // Получаем все блоки из очереди и сортируем по приоритету
+            var blocks = new List<SearchBlock>();
+            while (_pendingBlocks.TryDequeue(out var block))
+            {
+                blocks.Add(block);
+            }
+
+            if (blocks.Count == 0) return null;
+
+            // Сортируем по приоритету (меньший номер = выше приоритет)
+            blocks.Sort((a, b) => a.BlockId.CompareTo(b.BlockId));
+
+            // Возвращаем первый блок, остальные возвращаем в очередь
+            var nextBlock = blocks[0];
+            for (int i = 1; i < blocks.Count; i++)
+            {
+                _pendingBlocks.Enqueue(blocks[i]);
+            }
+
+            return nextBlock;
+        }
+
+        private AgentState GetOrCreateAgentState(string agentName)
+        {
+            return _agentStates.GetOrAdd(agentName, new AgentState
+            {
+                AgentId = Guid.NewGuid().ToString(),
+                AgentName = agentName,
+                LastSeen = DateTime.UtcNow,
+                IsConnected = true,
+                ConnectedAt = DateTime.UtcNow
+            });
         }
 
         public async Task ProcessTaskResultAsync(string agentName, object result)
@@ -150,6 +363,14 @@ namespace BitcoinFinderWebServer.Services
                 // Обновляем статистику агента
                 await UpdateAgentStatsAsync(agentName, result.ProcessedCombinations, 1);
 
+                // Обновляем состояние агента
+                var agentState = GetOrCreateAgentState(agentName);
+                agentState.CompletedBlocks++;
+                agentState.TotalProcessed += result.ProcessedCombinations;
+                agentState.LastSeen = DateTime.UtcNow;
+                agentState.LastBlockId = null; // Блок завершен
+                agentState.LastIndex = null;
+
                 // Если найдено решение
                 if (!string.IsNullOrEmpty(result.FoundSeedPhrase))
                 {
@@ -170,7 +391,35 @@ namespace BitcoinFinderWebServer.Services
             {
                 block.CurrentIndex = currentIndex;
                 block.LastProgressAt = DateTime.UtcNow;
+
+                // Обновляем состояние агента
+                var agentState = GetOrCreateAgentState(block.AssignedTo ?? "");
+                agentState.LastIndex = currentIndex;
+                agentState.LastSeen = DateTime.UtcNow;
             }
+            await System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        public async Task AgentDisconnectedAsync(string agentName)
+        {
+            var agentState = GetOrCreateAgentState(agentName);
+            agentState.IsConnected = false;
+            agentState.DisconnectedAt = DateTime.UtcNow;
+            
+            _logger.LogInformation($"Агент {agentName} отключен. Последний блок: {agentState.LastBlockId}, индекс: {agentState.LastIndex}");
+            
+            await System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        public async Task AgentReconnectedAsync(string agentName)
+        {
+            var agentState = GetOrCreateAgentState(agentName);
+            agentState.IsConnected = true;
+            agentState.ConnectedAt = DateTime.UtcNow;
+            agentState.LastSeen = DateTime.UtcNow;
+            
+            _logger.LogInformation($"Агент {agentName} переподключен");
+            
             await System.Threading.Tasks.Task.CompletedTask;
         }
 
@@ -250,6 +499,11 @@ namespace BitcoinFinderWebServer.Services
 
             _isRunning = false;
             _serverCts?.Cancel();
+            
+            // Сохраняем состояние перед остановкой
+            SaveServerState();
+            SaveAgentStates();
+            
             _logger.LogInformation("Собственный поиск сервера остановлен");
 
             await System.Threading.Tasks.Task.CompletedTask;
@@ -307,7 +561,7 @@ namespace BitcoinFinderWebServer.Services
         {
             return new ServerStats
             {
-                ConnectedAgents = _agentStats.Count,
+                ConnectedAgents = _agentStates.Values.Count(a => a.IsConnected),
                 PendingBlocks = _pendingBlocks.Count,
                 AssignedBlocks = _assignedBlocks.Count,
                 CompletedBlocks = _completedBlocks,
@@ -322,6 +576,18 @@ namespace BitcoinFinderWebServer.Services
         public List<string> GetFoundResults()
         {
             return new List<string>(_foundResults);
+        }
+
+        public List<AgentState> GetAgentStates()
+        {
+            return _agentStates.Values.ToList();
+        }
+
+        public void Dispose()
+        {
+            _autoSaveTimer?.Dispose();
+            SaveServerState();
+            SaveAgentStates();
         }
     }
 } 

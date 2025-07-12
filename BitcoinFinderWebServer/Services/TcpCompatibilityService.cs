@@ -205,6 +205,9 @@ namespace BitcoinFinderWebServer.Services
 
             _connectedAgents.TryAdd(agentId, connection);
 
+            // Уведомляем TaskManager о переподключении агента
+            await _taskManager.AgentReconnectedAsync(agentName);
+
             var response = new
             {
                 command = "HELLO_ACK",
@@ -221,13 +224,21 @@ namespace BitcoinFinderWebServer.Services
         private async Task HandleGoodbye(Dictionary<string, object> message, StreamWriter writer)
         {
             var agentId = GetStringValue(message, "agentId");
+            var agentName = GetStringValue(message, "agentName");
             
             if (!string.IsNullOrEmpty(agentId))
             {
                 _connectedAgents.TryRemove(agentId, out _);
                 _agentWriters.TryRemove(agentId, out _);
-                await _agentManager.UnregisterAgentAsync(agentId);
-                _logger.LogInformation($"Агент {agentId} отключился");
+                await _agentManager.UnregisterAgentAsync(agentName);
+                
+                // Уведомляем TaskManager об отключении агента
+                if (!string.IsNullOrEmpty(agentName))
+                {
+                    await _taskManager.AgentDisconnectedAsync(agentName);
+                }
+                
+                _logger.LogInformation($"Агент {agentName} отключился");
             }
 
             var response = new { command = "GOODBYE_ACK" };

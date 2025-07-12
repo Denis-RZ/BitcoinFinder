@@ -96,6 +96,37 @@ namespace BitcoinFinderWebServer.Models
         public bool IsConnected { get; set; }
     }
 
+    // Новые модели для синхронизации состояния
+    public class AgentState
+    {
+        public string AgentId { get; set; } = "";
+        public string AgentName { get; set; } = "";
+        public int Threads { get; set; } = 1;
+        public int? LastBlockId { get; set; }
+        public long? LastIndex { get; set; }
+        public DateTime LastSeen { get; set; }
+        public bool IsConnected { get; set; }
+        public DateTime ConnectedAt { get; set; }
+        public DateTime? DisconnectedAt { get; set; }
+        public long TotalProcessed { get; set; }
+        public int CompletedBlocks { get; set; }
+        public double CurrentRate { get; set; }
+    }
+
+    public class ServerState
+    {
+        public DateTime LastSaveTime { get; set; }
+        public long TotalProcessed { get; set; }
+        public int CompletedBlocksCount { get; set; }
+        public int TotalBlocks { get; set; }
+        public long LastProcessedIndex { get; set; }
+        public List<string> FoundResults { get; set; } = new();
+        public Dictionary<string, AgentState> AgentStates { get; set; } = new();
+        public List<SearchBlock> PendingBlocks { get; set; } = new();
+        public List<SearchBlock> AssignedBlocks { get; set; } = new();
+        public List<SearchBlock> CompletedBlocks { get; set; } = new();
+    }
+
     // Модели для API запросов/ответов
     public class AgentRegistrationRequest
     {

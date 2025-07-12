@@ -37,7 +37,8 @@ namespace BitcoinFinder
         
         public AgentState State { get; private set; } = AgentState.Disconnected;
         public string AgentName { get; set; } = Environment.MachineName;
-        public int Threads { get; set; } = 1;
+        public int Threads { get; set; } = Environment.ProcessorCount; // Автоопределение по количеству ядер
+        public double ProcessingPower { get; set; } = 1.0; // Мощность обработки (относительная)
 
         private TcpClient? _client;
         private StreamReader? _reader;
@@ -744,6 +745,43 @@ namespace BitcoinFinder
             _writer = null;
             _reader = null;
             _client = null;
+        }
+
+        // Метод для автоопределения оптимального количества потоков
+        public int GetOptimalThreadCount()
+        {
+            int processorCount = Environment.ProcessorCount;
+            
+            // Для CPU-интенсивных задач используем количество логических ядер
+            int optimalThreads = processorCount;
+            
+            // Ограничиваем максимальное количество потоков
+            optimalThreads = Math.Min(optimalThreads, 32); // Максимум 32 потока
+            
+            // Минимум 1 поток
+            optimalThreads = Math.Max(optimalThreads, 1);
+            
+            return optimalThreads;
+        }
+
+        // Метод для обновления количества потоков на основе производительности
+        public void UpdateThreadCountBasedOnPerformance(double currentRate, double targetRate = 1000.0)
+        {
+            if (currentRate > 0)
+            {
+                // Если производительность низкая, уменьшаем количество потоков
+                if (currentRate < targetRate * 0.5 && Threads > 1)
+                {
+                    Threads = Math.Max(1, Threads - 1);
+                    Log($"[AGENT] Снижена производительность, уменьшаем потоки до {Threads}");
+                }
+                // Если производительность высокая и есть резерв, увеличиваем
+                else if (currentRate > targetRate * 1.5 && Threads < Environment.ProcessorCount)
+                {
+                    Threads = Math.Min(Environment.ProcessorCount, Threads + 1);
+                    Log($"[AGENT] Высокая производительность, увеличиваем потоки до {Threads}");
+                }
+            }
         }
     }
 } 

@@ -10,6 +10,9 @@ namespace BitcoinFinder
     public partial class AgentForm : Form
     {
         private AgentController? agentController;
+        private System.Windows.Forms.Timer? autosaveTimer;
+        private bool isFormDisposed = false;
+        private bool isLoadingConfig = false;
 
         // UI элементы для агента
         private TextBox txtServerIp;
@@ -27,6 +30,8 @@ namespace BitcoinFinder
         private Button btnCheckPort;
         private NumericUpDown numThreads;
         private TextBox txtAgentName;
+        private MaskedTextBox txtServerIpMasked;
+        private NumericUpDown numServerPort;
         private const string ConfigFile = "agent_config.json";
 
         public AgentForm()
@@ -49,10 +54,10 @@ namespace BitcoinFinder
                 toolTip.SetToolTip(btnConnect, "Подключиться/отключиться к серверу");
             if (btnCheckPort != null)
                 toolTip.SetToolTip(btnCheckPort, "Проверить доступность порта");
-            if (txtServerIp != null)
-                toolTip.SetToolTip(txtServerIp, "IP-адрес сервера");
-            if (txtServerPort != null)
-                toolTip.SetToolTip(txtServerPort, "Порт сервера");
+            if (txtServerIpMasked != null)
+                toolTip.SetToolTip(txtServerIpMasked, "IP-адрес сервера");
+            if (numServerPort != null)
+                toolTip.SetToolTip(numServerPort, "Порт сервера");
             if (txtAgentName != null)
                 toolTip.SetToolTip(txtAgentName, "Имя агента");
             if (numThreads != null)
@@ -98,16 +103,52 @@ namespace BitcoinFinder
             // (остальной код инициализации UI ниже не меняется)
 
             LoadAgentConfig();
+
+            // Подписка на изменения полей с автоматическим сохранением (только после загрузки конфига!)
+            txtServerIp.TextChanged += (s, e) => 
+            {
+                if (!isFormDisposed && !this.IsDisposed && !isLoadingConfig)
+                {
+                    SaveAgentConfig();
+                    AddLog("IP сервера изменен");
+                }
+            };
+            txtServerPort.TextChanged += (s, e) => 
+            {
+                if (!isFormDisposed && !this.IsDisposed && !isLoadingConfig)
+                {
+                    SaveAgentConfig();
+                    AddLog("Порт сервера изменен");
+                }
+            };
+            txtAgentName.TextChanged += (s, e) => 
+            {
+                if (!isFormDisposed && !this.IsDisposed && !isLoadingConfig)
+                {
+                    SaveAgentConfig();
+                    AddLog("Имя агента изменено");
+                }
+            };
+            numThreads.ValueChanged += (s, e) => 
+            {
+                if (!isFormDisposed && !this.IsDisposed && !isLoadingConfig)
+                {
+                    SaveAgentConfig();
+                    AddLog($"Количество потоков изменено на {numThreads.Value}");
+                }
+            };
+
             // Таймер автосохранения прогресса
-            var autosaveTimer = new System.Windows.Forms.Timer();
+            autosaveTimer = new System.Windows.Forms.Timer();
             autosaveTimer.Interval = 10000; // 10 секунд
-            autosaveTimer.Tick += (s, e) => SaveAgentConfig();
+            autosaveTimer.Tick += (s, e) => 
+            {
+                if (!isFormDisposed && !this.IsDisposed)
+                {
+                    SaveAgentConfig();
+                }
+            };
             autosaveTimer.Start();
-            // Подписка на изменения полей
-            txtServerIp.TextChanged += (s, e) => SaveAgentConfig();
-            txtServerPort.TextChanged += (s, e) => SaveAgentConfig();
-            txtAgentName.TextChanged += (s, e) => SaveAgentConfig();
-            numThreads.ValueChanged += (s, e) => SaveAgentConfig();
         }
 
         private void InitializeComponent()
@@ -143,12 +184,12 @@ namespace BitcoinFinder
             connectionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             connectionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
 
-            // IP сервера
+            // IP сервера (TextBox)
             connectionLayout.Controls.Add(new Label { Text = "IP сервера:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 0, 0);
             txtServerIp = new TextBox { Text = "127.0.0.1", Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
             connectionLayout.Controls.Add(txtServerIp, 1, 0);
 
-            // Порт сервера
+            // Порт сервера (TextBox)
             connectionLayout.Controls.Add(new Label { Text = "Порт:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 2, 0);
             txtServerPort = new TextBox { Text = "5000", Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
             connectionLayout.Controls.Add(txtServerPort, 3, 0);
@@ -174,7 +215,7 @@ namespace BitcoinFinder
             connectionLayout.Controls.Add(txtAgentName, 1, 2);
             // Добавляем поле для потоков
             connectionLayout.Controls.Add(new Label { Text = "Потоков:", Font = new Font("Segoe UI", 10F), TextAlign = ContentAlignment.MiddleRight }, 2, 2);
-            numThreads = new NumericUpDown { Minimum = 1, Maximum = 128, Value = 1, Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
+            numThreads = new NumericUpDown { Minimum = 1, Maximum = 128, Value = Environment.ProcessorCount, Font = new Font("Segoe UI", 10F), Dock = DockStyle.Fill };
             connectionLayout.Controls.Add(numThreads, 3, 2);
 
             connectionGroup.Controls.Add(connectionLayout);
@@ -295,7 +336,7 @@ namespace BitcoinFinder
                 return;
             }
 
-            if (!int.TryParse(txtServerPort.Text, out int port) || port < 1 || port > 65535)
+            if (!int.TryParse(txtServerPort.Text.Trim(), out int port) || port < 1 || port > 65535)
             {
                 MessageBox.Show("Введите корректный номер порта (1-65535)!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -419,20 +460,47 @@ namespace BitcoinFinder
 
         private void AddLog(string message)
         {
-            if (txtAgentLog.InvokeRequired)
+            // Проверяем, не уничтожена ли форма
+            if (isFormDisposed || this.IsDisposed || txtAgentLog.IsDisposed)
             {
-                txtAgentLog.Invoke(new Action(() => AddLog(message)));
                 return;
             }
 
-            var timestamp = DateTime.Now.ToString("HH:mm:ss");
-            var logMessage = $"[{timestamp}] {message}";
-            txtAgentLog.AppendText(logMessage + "\r\n");
-            txtAgentLog.SelectionStart = txtAgentLog.Text.Length;
-            txtAgentLog.ScrollToCaret();
-            
-            // Логируем в файл
-            // Logger.LogAgent(message); // Закомментировано для уменьшения мусора в логах
+            if (txtAgentLog.InvokeRequired)
+            {
+                try
+                {
+                    txtAgentLog.Invoke(new Action(() => AddLog(message)));
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Форма уже закрыта, игнорируем
+                    return;
+                }
+                return;
+            }
+
+            try
+            {
+                var timestamp = DateTime.Now.ToString("HH:mm:ss");
+                var logMessage = $"[{timestamp}] {message}";
+                txtAgentLog.AppendText(logMessage + "\r\n");
+                txtAgentLog.SelectionStart = txtAgentLog.Text.Length;
+                txtAgentLog.ScrollToCaret();
+                
+                // Логируем в файл
+                // Logger.LogAgent(message); // Закомментировано для уменьшения мусора в логах
+            }
+            catch (ObjectDisposedException)
+            {
+                // Форма уже закрыта, игнорируем
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Другие ошибки логируем в консоль
+                System.Diagnostics.Debug.WriteLine($"Ошибка логирования: {ex.Message}");
+            }
         }
 
         private void UpdateTaskInfo(AgentTaskInfo task)
@@ -468,7 +536,7 @@ namespace BitcoinFinder
         private async void BtnCheckPort_Click(object? sender, EventArgs e)
         {
             string ip = txtServerIp.Text.Trim();
-            if (!int.TryParse(txtServerPort.Text, out int port) || port < 1 || port > 65535)
+            if (!int.TryParse(txtServerPort.Text.Trim(), out int port) || port < 1 || port > 65535)
             {
                 MessageBox.Show("Введите корректный номер порта (1-65535)!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -509,77 +577,294 @@ namespace BitcoinFinder
 
         private void SaveAgentConfig()
         {
-            var config = new AgentConfig
-            {
-                ServerIp = txtServerIp.Text.Trim(),
-                ServerPort = txtServerPort.Text.Trim(),
-                AgentName = txtAgentName.Text.Trim(),
-                Threads = (int)numThreads.Value
-            };
+            if (isLoadingConfig) { AddLog("[DEBUG] SaveAgentConfig: вызов проигнорирован, идет загрузка"); return; }
             try
             {
-                File.WriteAllText(ConfigFile, JsonSerializer.Serialize(config));
-            }
-            catch { }
-        }
-
-        private void LoadAgentConfig()
-        {
-            try
-            {
+                AddLog($"[DEBUG] SaveAgentConfig: ДО сохранения: IP={txtServerIp.Text}, Port={txtServerPort.Text}, Name={txtAgentName.Text}, Threads={numThreads.Value}");
+                string ip = txtServerIp.Text.Trim();
+                string portStr = txtServerPort.Text.Trim();
+                string agentName = txtAgentName.Text.Trim();
+                int threads = (int)numThreads.Value;
+                if (!IsValidIpAddress(ip))
+                {
+                    AddLog($"Ошибка сохранения: некорректный IP адрес '{ip}'");
+                    return;
+                }
+                if (!int.TryParse(portStr, out int port) || port < 1 || port > 65535)
+                {
+                    AddLog($"Ошибка сохранения: некорректный порт '{portStr}'");
+                    return;
+                }
+                if (string.IsNullOrWhiteSpace(agentName))
+                    agentName = Environment.MachineName;
+                if (threads < (int)numThreads.Minimum || threads > (int)numThreads.Maximum)
+                    threads = Environment.ProcessorCount;
+                var config = new AgentConfig
+                {
+                    ServerIp = ip,
+                    ServerPort = port,
+                    AgentName = agentName,
+                    Threads = threads
+                };
+                var json = JsonSerializer.Serialize(config, new JsonSerializerOptions 
+                { 
+                    WriteIndented = true,
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                });
+                AddLog($"Сохранение конфигурации в файл: {Path.GetFullPath(ConfigFile)}");
+                AddLog($"JSON для сохранения: {json}");
+                File.WriteAllText(ConfigFile, json);
                 if (File.Exists(ConfigFile))
                 {
-                    var config = JsonSerializer.Deserialize<AgentConfig>(File.ReadAllText(ConfigFile));
-                    if (config != null)
-                    {
-                        txtServerIp.Text = config.ServerIp;
-                        txtServerPort.Text = config.ServerPort;
-                        txtAgentName.Text = config.AgentName;
-                        numThreads.Value = Math.Max(1, Math.Min(numThreads.Maximum, config.Threads));
-                        
-                        // Проверяем наличие сохраненного прогресса
-                        if (File.Exists("agent_config.json"))
-                        {
-                            var progressJson = File.ReadAllText("agent_config.json");
-                            var progress = JsonSerializer.Deserialize<Dictionary<string, object>>(progressJson);
-                            if (progress != null && progress.ContainsKey("LastBlockId") && progress.ContainsKey("LastIndex"))
-                            {
-                                var lastBlockId = Convert.ToInt32(progress["LastBlockId"]);
-                                var lastIndex = Convert.ToInt64(progress["LastIndex"]);
-                                if (lastBlockId >= 0 && lastIndex > 0)
-                                {
-                                    AddLog($"Найден сохраненный прогресс: блок {lastBlockId}, позиция {lastIndex:N0}");
-                                    AddLog("Агент будет запрашивать продолжение с этой позиции");
-                                }
-                            }
-                        }
-                    }
+                    var savedContent = File.ReadAllText(ConfigFile);
+                    AddLog($"Файл создан успешно. Размер: {savedContent.Length} байт");
+                    AddLog($"Конфигурация сохранена: {config.ServerIp}:{config.ServerPort}, агент: {config.AgentName}, потоков: {config.Threads}");
+                    AddLog($"[DEBUG] SaveAgentConfig: ПОСЛЕ сохранения: IP={txtServerIp.Text}, Port={txtServerPort.Text}, Name={txtAgentName.Text}, Threads={numThreads.Value}");
+                }
+                else
+                {
+                    AddLog("ОШИБКА: Файл не был создан!");
                 }
             }
             catch (Exception ex)
             {
-                AddLog($"Ошибка загрузки конфигурации: {ex.Message}");
+                AddLog($"Ошибка сохранения конфигурации: {ex.Message}");
+                AddLog($"Стек вызовов: {ex.StackTrace}");
             }
+        }
+
+        private bool IsValidIpAddress(string ip)
+        {
+            if (string.IsNullOrWhiteSpace(ip))
+                return false;
+
+            // Проверяем, является ли это localhost
+            if (ip.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // Проверяем формат IP адреса
+            var parts = ip.Split('.');
+            if (parts.Length != 4)
+                return false;
+
+            foreach (var part in parts)
+            {
+                if (!int.TryParse(part, out int num) || num < 0 || num > 255)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private void LoadAgentConfig()
+        {
+            isLoadingConfig = true;
+            try
+            {
+                AddLog($"[DEBUG] LoadAgentConfig: ДО загрузки: IP={txtServerIp.Text}, Port={txtServerPort.Text}, Name={txtAgentName.Text}, Threads={numThreads.Value}");
+                string ip = "127.0.0.1";
+                int port = 5000;
+                string agentName = Environment.MachineName;
+                int threads = Environment.ProcessorCount;
+                if (File.Exists(ConfigFile))
+                {
+                    var json = File.ReadAllText(ConfigFile);
+                    AddLog($"Загрузка конфигурации из файла: {Path.GetFullPath(ConfigFile)}");
+                    AddLog($"Содержимое файла: {json}");
+                    var config = JsonSerializer.Deserialize<AgentConfig>(json);
+                    if (config != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(config.ServerIp) && IsValidIpAddress(config.ServerIp))
+                            ip = config.ServerIp;
+                        else
+                            AddLog($"Некорректный IP адрес в конфиге: '{config.ServerIp}', используем 127.0.0.1");
+                        if (config.ServerPort >= 1 && config.ServerPort <= 65535)
+                            port = config.ServerPort;
+                        else
+                            AddLog($"Некорректный порт в конфиге: {config.ServerPort}, используем 5000");
+                        if (!string.IsNullOrWhiteSpace(config.AgentName))
+                            agentName = config.AgentName;
+                        if (config.Threads >= (int)numThreads.Minimum && config.Threads <= (int)numThreads.Maximum)
+                            threads = config.Threads;
+                        else
+                            AddLog($"Некорректное число потоков в конфиге: {config.Threads}, используем {Environment.ProcessorCount}");
+                    }
+                }
+                // Применяем значения к контролам
+                txtServerIp.Text = ip;
+                txtServerPort.Text = port.ToString();
+                txtAgentName.Text = agentName;
+                numThreads.Value = threads;
+                AddLog($"[DEBUG] LoadAgentConfig: ПОСЛЕ загрузки: IP={txtServerIp.Text}, Port={txtServerPort.Text}, Name={txtAgentName.Text}, Threads={numThreads.Value}");
+                AddLog($"Конфигурация загружена: {txtServerIp.Text}:{txtServerPort.Text}, агент: {txtAgentName.Text}, потоков: {numThreads.Value}");
+                // Проверяем наличие сохраненного прогресса
+                if (File.Exists("agent_progress.json"))
+                {
+                    try
+                    {
+                        var progressJson = File.ReadAllText("agent_progress.json");
+                        var progress = JsonSerializer.Deserialize<Dictionary<string, object>>(progressJson);
+                        if (progress != null && progress.ContainsKey("LastBlockId") && progress.ContainsKey("LastIndex"))
+                        {
+                            var lastBlockId = Convert.ToInt32(progress["LastBlockId"]);
+                            var lastIndex = Convert.ToInt64(progress["LastIndex"]);
+                            if (lastBlockId >= 0 && lastIndex > 0)
+                            {
+                                AddLog($"Найден сохраненный прогресс: блок {lastBlockId}, позиция {lastIndex:N0}");
+                                AddLog("Агент будет запрашивать продолжение с этой позиции");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        AddLog($"Ошибка загрузки прогресса: {ex.Message}");
+                    }
+                }
+            }
+            catch (JsonException ex)
+            {
+                AddLog($"Ошибка десериализации конфигурации: {ex.Message}");
+                AddLog("Удаляем битый файл конфигурации и создаем новый");
+                
+                try
+                {
+                    if (File.Exists(ConfigFile))
+                        File.Delete(ConfigFile);
+                }
+                catch { }
+                
+                CreateDefaultConfig();
+            }
+            catch (Exception ex)
+            {
+                AddLog($"Ошибка загрузки конфигурации: {ex.Message}");
+                AddLog($"Стек вызовов: {ex.StackTrace}");
+                CreateDefaultConfig();
+            }
+            finally
+            {
+                isLoadingConfig = false;
+            }
+        }
+
+        private void CreateDefaultConfig()
+        {
+            isLoadingConfig = true;
+            txtServerIp.Text = "127.0.0.1";
+            txtServerPort.Text = "5000";
+            txtAgentName.Text = Environment.MachineName;
+            numThreads.Value = Environment.ProcessorCount;
+            isLoadingConfig = false;
+            SaveAgentConfig();
         }
 
         private class AgentConfig
         {
             public string ServerIp { get; set; } = "127.0.0.1";
-            public string ServerPort { get; set; } = "5000";
+            public int ServerPort { get; set; } = 5000; // Изменено с string на int
             public string AgentName { get; set; } = "";
             public int Threads { get; set; } = 1;
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            SaveAgentConfig();
-            if (agentController?.IsConnected == true)
+            isFormDisposed = true; // Устанавливаем флаг перед уничтожением формы
+            
+            // Останавливаем таймер автосохранения
+            if (autosaveTimer != null)
             {
-                _ = Task.Run(async () => await agentController.DisconnectAsync());
+                autosaveTimer.Stop();
+                autosaveTimer.Dispose();
+                autosaveTimer = null;
             }
             
-            agentController?.Dispose();
+            try
+            {
+                // Сохраняем конфигурацию без логирования
+                SaveAgentConfigSilent();
+            }
+            catch (Exception ex)
+            {
+                // Логируем ошибку в консоль вместо UI
+                System.Diagnostics.Debug.WriteLine($"Ошибка сохранения при закрытии: {ex.Message}");
+            }
+            
+            if (agentController?.IsConnected == true)
+            {
+                try
+                {
+                    // Отключаемся от сервера без логирования
+                    _ = Task.Run(async () => 
+                    {
+                        try
+                        {
+                            await agentController.DisconnectAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Ошибка отключения: {ex.Message}");
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Ошибка при отключении: {ex.Message}");
+                }
+            }
+            
+            try
+            {
+                agentController?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Ошибка при освобождении ресурсов: {ex.Message}");
+            }
+            
             base.OnFormClosing(e);
+        }
+        
+        private void SaveAgentConfigSilent()
+        {
+            try
+            {
+                // Проверяем корректность данных перед сохранением
+                string ip = txtServerIp.Text.Trim();
+                string portStr = txtServerPort.Text.Trim();
+                string agentName = txtAgentName.Text.Trim();
+                int threads = (int)numThreads.Value;
+                if (!IsValidIpAddress(ip))
+                {
+                    return; // Не логируем ошибки при закрытии
+                }
+                if (!int.TryParse(portStr, out int port) || port < 1 || port > 65535)
+                {
+                    return; // Не логируем ошибки при закрытии
+                }
+                if (string.IsNullOrWhiteSpace(agentName))
+                    agentName = Environment.MachineName;
+                if (threads < (int)numThreads.Minimum || threads > (int)numThreads.Maximum)
+                    threads = Environment.ProcessorCount;
+                var config = new AgentConfig
+                {
+                    ServerIp = ip,
+                    ServerPort = port,
+                    AgentName = agentName,
+                    Threads = threads
+                };
+                var json = JsonSerializer.Serialize(config, new JsonSerializerOptions 
+                { 
+                    WriteIndented = true,
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                });
+                
+                File.WriteAllText(ConfigFile, json);
+            }
+            catch (Exception ex)
+            {
+                // Логируем ошибку в консоль вместо UI
+                System.Diagnostics.Debug.WriteLine($"Ошибка сохранения конфигурации: {ex.Message}");
+            }
         }
     }
 } 

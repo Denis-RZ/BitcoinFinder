@@ -333,9 +333,12 @@ namespace BitcoinFinder
             
             // Колонки для агентов
             dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "AgentId", HeaderText = "ID Агента", Width = 150 });
+            dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "Threads", HeaderText = "Потоки", Width = 60 });
+            dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "AssignedBlocks", HeaderText = "Блоки", Width = 80 });
             dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "ProcessedCount", HeaderText = "Обработано", Width = 100 });
             dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "CurrentRate", HeaderText = "Скорость/сек", Width = 100 });
-            dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "CompletedBlocks", HeaderText = "Блоков", Width = 80 });
+            dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "ProgressPercent", HeaderText = "Прогресс", Width = 80 });
+            dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "CompletedBlocks", HeaderText = "Завершено", Width = 80 });
             dgvAgents.Columns.Add(new DataGridViewTextBoxColumn { Name = "LastUpdate", HeaderText = "Последняя активность", Width = 150 });
 
             // Добавляем обработчик для корректного копирования
@@ -623,12 +626,15 @@ namespace BitcoinFinder
             
             foreach (var agentStat in stats.AgentStats)
             {
-                AddLog($"[UI] Добавляем агента в грид: {agentStat.AgentId}, обработано: {agentStat.ProcessedCount:N0}, скорость: {agentStat.CurrentRate:F1}, блоков: {agentStat.CompletedBlocks}");
+                AddLog($"[UI] Добавляем агента в грид: {agentStat.AgentId}, потоки: {agentStat.Threads}, блоки: {agentStat.AssignedBlocksCount}/{agentStat.MaxConcurrentBlocks}, прогресс: {agentStat.ProgressPercent:F1}%");
                 dgvAgents.Rows.Add(
                     agentStat.AgentId,
+                    agentStat.Threads.ToString(),
+                    $"{agentStat.AssignedBlocksCount}/{agentStat.MaxConcurrentBlocks}",
                     agentStat.ProcessedCount.ToString("N0"),
                     agentStat.CurrentRate.ToString("F1"),
-                    agentStat.CompletedBlocks,
+                    $"{agentStat.ProgressPercent:F1}%",
+                    agentStat.CompletedBlocks.ToString(),
                     agentStat.LastUpdate.ToString("HH:mm:ss")
                 );
             }

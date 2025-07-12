@@ -309,6 +309,47 @@ namespace BitcoinFinderWebServer.Controllers
                 return BadRequest(new { Success = false, Message = ex.Message });
             }
         }
+
+        [HttpGet("agent-states")]
+        public async Task<IActionResult> GetAgentStates()
+        {
+            try
+            {
+                var agentStates = _taskManager.GetAgentStates();
+                return Ok(agentStates);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при получении состояний агентов");
+                return BadRequest(new { Success = false, Message = ex.Message });
+            }
+        }
+
+        [HttpGet("sync-state")]
+        public async Task<IActionResult> GetSyncState()
+        {
+            try
+            {
+                var stats = _taskManager.GetServerStats();
+                var agentStates = _taskManager.GetAgentStates();
+                var foundResults = _taskManager.GetFoundResults();
+
+                var syncState = new
+                {
+                    ServerStats = stats,
+                    AgentStates = agentStates,
+                    FoundResults = foundResults,
+                    LastSync = DateTime.UtcNow
+                };
+
+                return Ok(syncState);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при получении состояния синхронизации");
+                return BadRequest(new { Success = false, Message = ex.Message });
+            }
+        }
     }
 
     public class AgentRegistrationRequest
