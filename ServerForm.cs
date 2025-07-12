@@ -32,9 +32,30 @@ namespace BitcoinFinder
         private ListBox lstFoundResults;
         private ProgressBar progressBar;
         private Label lblServerIp;
+        private FlowLayoutPanel legendPanel; // Добавить панель для легенды
+
+        // Добавить словарь для цветов агентов
+        private Dictionary<string, Color> agentColors = new Dictionary<string, Color>();
+        private Color[] palette = new Color[]
+        {
+            Color.FromArgb(220,255,220), Color.FromArgb(220,240,255), Color.FromArgb(255,245,200),
+            Color.FromArgb(255,220,220), Color.FromArgb(220,255,255), Color.FromArgb(255,220,255),
+            Color.FromArgb(240,220,255), Color.FromArgb(255,240,220), Color.FromArgb(220,255,240),
+            Color.FromArgb(240,255,220), Color.FromArgb(220,220,255), Color.FromArgb(255,220,240)
+        };
+        private int colorIndex = 0;
 
         public ServerForm()
         {
+            // Цвета для светлой пастельной темы
+            Color pastelBlue = Color.FromArgb(230, 240, 255);
+            Color pastelGreen = Color.FromArgb(220, 255, 230);
+            Color pastelRed = Color.FromArgb(255, 230, 230);
+            Color pastelGray = Color.FromArgb(245, 245, 250);
+            Color pastelAccent = Color.FromArgb(220, 230, 255);
+            Color pastelYellow = Color.FromArgb(255, 255, 220);
+            Color pastelBorder = Color.FromArgb(210, 220, 230);
+
             // Инициализируем UI элементы перед вызовом InitializeComponent
             txtPort = new TextBox();
             txtBitcoinAddress = new TextBox();
@@ -50,13 +71,79 @@ namespace BitcoinFinder
             lstFoundResults = new ListBox();
             progressBar = new ProgressBar();
             lblServerIp = new Label();
+            legendPanel = new FlowLayoutPanel();
             statsTimer = new System.Windows.Forms.Timer();
-            
-            Program.LoadConfig(); // Явная загрузка конфига
+
+            // ToolTip для всех важных элементов
+            var toolTip = new ToolTip();
+            toolTip.SetToolTip(btnStartServer, "Запустить сервер");
+            toolTip.SetToolTip(btnStopServer, "Остановить сервер");
+            toolTip.SetToolTip(txtPort, "Порт для подключения агентов");
+            toolTip.SetToolTip(txtBitcoinAddress, "Целевой Bitcoin адрес");
+            toolTip.SetToolTip(numWordCount, "Количество слов в seed-фразе");
+            toolTip.SetToolTip(txtBlockSize, "Размер блока для обработки");
+            toolTip.SetToolTip(numServerThreads, "Количество потоков сервера");
+
+            // Цвета и стили для кнопок
+            btnStartServer.FlatStyle = FlatStyle.Flat;
+            btnStartServer.BackColor = pastelGreen;
+            btnStartServer.ForeColor = Color.DarkGreen;
+            btnStartServer.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            btnStartServer.FlatAppearance.BorderColor = pastelBorder;
+            btnStartServer.FlatAppearance.BorderSize = 1;
+            btnStartServer.Text = "▶️ Запустить";
+            btnStartServer.Height = 40;
+
+            btnStopServer.FlatStyle = FlatStyle.Flat;
+            btnStopServer.BackColor = pastelRed;
+            btnStopServer.ForeColor = Color.DarkRed;
+            btnStopServer.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            btnStopServer.FlatAppearance.BorderColor = pastelBorder;
+            btnStopServer.FlatAppearance.BorderSize = 1;
+            btnStopServer.Text = "⏹️ Остановить";
+            btnStopServer.Height = 40;
+
+            // Стиль для DataGridView
+            dgvAgents.BackgroundColor = pastelGray;
+            dgvAgents.DefaultCellStyle.BackColor = pastelGray;
+            dgvAgents.DefaultCellStyle.SelectionBackColor = pastelAccent;
+            dgvAgents.DefaultCellStyle.SelectionForeColor = Color.Black;
+            dgvAgents.DefaultCellStyle.Font = new Font("Segoe UI", 10F);
+            dgvAgents.ColumnHeadersDefaultCellStyle.BackColor = pastelBlue;
+            dgvAgents.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+            dgvAgents.EnableHeadersVisualStyles = false;
+            dgvAgents.GridColor = pastelBorder;
+            dgvAgents.BorderStyle = BorderStyle.None;
+            dgvAgents.RowHeadersVisible = false;
+            dgvAgents.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            dgvAgents.AllowUserToResizeRows = false;
+            dgvAgents.AllowUserToResizeColumns = false;
+
+            // Стиль для логов
+            txtServerLog.BackColor = Color.FromArgb(30, 30, 30);
+            txtServerLog.ForeColor = Color.FromArgb(180, 255, 180);
+            txtServerLog.Font = new Font("Consolas", 10F);
+            txtServerLog.BorderStyle = BorderStyle.FixedSingle;
+
+            // Стиль для прогресс-бара
+            progressBar.Height = 30;
+            progressBar.ForeColor = Color.FromArgb(120, 200, 120);
+            progressBar.BackColor = pastelGray;
+
+            // Стиль для GroupBox
+            this.BackColor = pastelGray;
+
+            // Заголовок формы
+            this.Text = "🖥️ Bitcoin Finder Server";
+            this.Font = new Font("Segoe UI", 11F);
+
+            // Цвета для лейаутов и панелей
+            // (остальной код инициализации UI ниже не меняется)
+
+            Program.LoadConfig();
             InitializeComponent();
             SetupStatsTimer();
             LoadServerConfig();
-            // Показываем IP сразу при запуске формы
             string serverIp = GetLocalIPAddress();
             int port = Program.Config.Server.Port;
             lblServerIp.Text = $"🌐 IP для агентов: {serverIp}:{port}";
@@ -305,6 +392,13 @@ namespace BitcoinFinder
             mainLayout.Controls.Add(logGroup, 0, 3);
             mainLayout.SetColumnSpan(logGroup, 2);
 
+            // === ЛЕГЕНДА ===
+            legendPanel.Dock = DockStyle.Fill;
+            legendPanel.FlowDirection = FlowDirection.TopDown;
+            legendPanel.WrapContents = false;
+            legendPanel.AutoScroll = true; // Разрешить прокрутку, если элементов много
+            mainLayout.Controls.Add(legendPanel, 1, 3); // Поместить легенду в последнюю строку
+
             Controls.Add(mainLayout);
         }
 
@@ -538,6 +632,9 @@ namespace BitcoinFinder
                     agentStat.LastUpdate.ToString("HH:mm:ss")
                 );
             }
+
+            // Обновляем легенду
+            UpdateAgentLegend();
         }
 
         private void AddLog(string message)
@@ -676,5 +773,63 @@ namespace BitcoinFinder
                 }
             }
         }
+
+        private void UpdateAgentLegend()
+        {
+            // Очистить и пересоздать легенду
+            legendPanel.Controls.Clear();
+            int y = 0;
+            // Получаем текущие статистики агентов и сервера
+            var currentAgentStats = server?.GetCurrentStats().AgentStats.ToDictionary(a => a.AgentId) ?? new Dictionary<string, AgentStats>();
+            // Добавляем агенты
+            foreach (var agent in currentAgentStats.Values.OrderBy(a => a.AgentId))
+            {
+                if (!agentColors.ContainsKey(agent.AgentId))
+                {
+                    agentColors[agent.AgentId] = palette[colorIndex % palette.Length];
+                    colorIndex++;
+                }
+                var color = agentColors[agent.AgentId];
+                var panel = new Panel { BackColor = color, Width = 18, Height = 18, Left = 5, Top = y+2 };
+                var label = new Label
+                {
+                    Text = $"{agent.AgentId}: {agent.ProcessedCount:N0} | {agent.CurrentRate:F1}/с | ETA: {FormatEta(agent.EtaSeconds)}",
+                    Left = 28, Top = y, Width = 420, Height = 20, Font = new Font("Segoe UI", 9F)
+                };
+                legendPanel.Controls.Add(panel);
+                legendPanel.Controls.Add(label);
+                y += 22;
+            }
+            // Добавляем сервер
+            var stats = server?.GetCurrentStats();
+            if (stats != null)
+            {
+                if (!agentColors.ContainsKey("Сервер"))
+                {
+                    agentColors["Сервер"] = Color.LightGray; // Определяем цвет для сервера
+                }
+                var color = agentColors["Сервер"];
+                var panel = new Panel { BackColor = color, Width = 18, Height = 18, Left = 5, Top = y+2 };
+                var label = new Label
+                {
+                    Text = $"Сервер: {stats.TotalProcessed:N0} | ETA: ?",
+                    Left = 28, Top = y, Width = 420, Height = 20, Font = new Font("Segoe UI", 9F)
+                };
+                legendPanel.Controls.Add(panel);
+                legendPanel.Controls.Add(label);
+                y += 22;
+            }
+        }
+        private string FormatEta(double etaSeconds)
+        {
+            if (etaSeconds < 0 || double.IsInfinity(etaSeconds) || double.IsNaN(etaSeconds)) return "?";
+            var ts = TimeSpan.FromSeconds(etaSeconds);
+            if (ts.TotalHours >= 1)
+                return $"{(int)ts.TotalHours}ч {ts.Minutes}м {ts.Seconds}с";
+            if (ts.TotalMinutes >= 1)
+                return $"{ts.Minutes}м {ts.Seconds}с";
+            return $"{ts.Seconds}с";
+        }
+        // Вызовите UpdateAgentLegend() после обновления статистики агентов или сервера
     }
 } 

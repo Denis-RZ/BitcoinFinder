@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\*.cs" Exclude="..\Program.cs" />
+    <Compile Include="..\*.cs" Exclude="..\Program.cs;..\BitcoinFinderWebServer\**\*" />
     <Compile Include="..\Distributed\*.cs" />
   </ItemGroup>
 

@@ -89,6 +89,9 @@ namespace BitcoinFinder
                 currentAgentId = agentClient.AgentName + "_" + DateTime.Now.ToString("HHmmss");
                 bool registered = await agentClient.RegisterAgent(currentAgentId, cancellationSource.Token);
                 
+                // Сохраняем конфигурацию агента
+                agentClient.SaveAgentConfig();
+                
                 if (!registered)
                 {
                     SetState(AgentState.Error);
@@ -283,6 +286,11 @@ namespace BitcoinFinder
         private void HandleFoundResult(string result)
         {
             OnLog?.Invoke($"*** НАЙДЕНО СОВПАДЕНИЕ *** {result}");
+        }
+
+        public void SaveAgentConfig()
+        {
+            agentClient.SaveAgentConfig();
         }
 
         public void Dispose()

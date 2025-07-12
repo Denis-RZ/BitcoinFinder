@@ -18,6 +18,7 @@
     <Compile Remove="DistributedProtocolTests/**/*.cs" />
     <Compile Remove="TestDistributedAgent/**/*.cs" />
     <Compile Remove="TestDistributedServer/**/*.cs" />
+    <Compile Remove="BitcoinFinderWebServer/**/*.cs" />
   </ItemGroup>
 
 </Project> 

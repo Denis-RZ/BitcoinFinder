@@ -31,8 +31,83 @@ namespace BitcoinFinder
 
         public AgentForm()
         {
+            // Цвета для светлой пастельной темы
+            Color pastelBlue = Color.FromArgb(230, 240, 255);
+            Color pastelGreen = Color.FromArgb(220, 255, 230);
+            Color pastelRed = Color.FromArgb(255, 230, 230);
+            Color pastelGray = Color.FromArgb(245, 245, 250);
+            Color pastelAccent = Color.FromArgb(220, 230, 255);
+            Color pastelYellow = Color.FromArgb(255, 255, 220);
+            Color pastelBorder = Color.FromArgb(210, 220, 230);
+
+            var toolTip = new ToolTip();
+
             InitializeComponent();
+
+            // ToolTip только для реально существующих контролов
+            if (btnConnect != null)
+                toolTip.SetToolTip(btnConnect, "Подключиться/отключиться к серверу");
+            if (btnCheckPort != null)
+                toolTip.SetToolTip(btnCheckPort, "Проверить доступность порта");
+            if (txtServerIp != null)
+                toolTip.SetToolTip(txtServerIp, "IP-адрес сервера");
+            if (txtServerPort != null)
+                toolTip.SetToolTip(txtServerPort, "Порт сервера");
+            if (txtAgentName != null)
+                toolTip.SetToolTip(txtAgentName, "Имя агента");
+            if (numThreads != null)
+                toolTip.SetToolTip(numThreads, "Количество потоков агента");
+
+            // Цвета и стили для кнопки подключения
+            btnConnect.FlatStyle = FlatStyle.Flat;
+            btnConnect.BackColor = pastelGreen;
+            btnConnect.ForeColor = Color.DarkGreen;
+            btnConnect.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            btnConnect.FlatAppearance.BorderColor = pastelBorder;
+            btnConnect.FlatAppearance.BorderSize = 1;
+            btnConnect.Text = "🔗 Подключиться";
+            btnConnect.Height = 40;
+
+            // Стиль для кнопки проверки порта
+            btnCheckPort.FlatStyle = FlatStyle.Flat;
+            btnCheckPort.BackColor = pastelBlue;
+            btnCheckPort.ForeColor = Color.Navy;
+            btnCheckPort.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            btnCheckPort.FlatAppearance.BorderColor = pastelBorder;
+            btnCheckPort.FlatAppearance.BorderSize = 1;
+
+            // Стиль для логов
+            txtAgentLog.BackColor = Color.FromArgb(30, 30, 30);
+            txtAgentLog.ForeColor = Color.FromArgb(180, 255, 180);
+            txtAgentLog.Font = new Font("Consolas", 10F);
+            txtAgentLog.BorderStyle = BorderStyle.FixedSingle;
+
+            // Стиль для прогресс-бара
+            progressBar.Height = 30;
+            progressBar.ForeColor = Color.FromArgb(120, 200, 120);
+            progressBar.BackColor = pastelGray;
+
+            // Стиль для GroupBox
+            this.BackColor = pastelGray;
+
+            // Заголовок формы
+            this.Text = "🤖 Bitcoin Finder Agent";
+            this.Font = new Font("Segoe UI", 11F);
+
+            // Цвета для лейаутов и панелей
+            // (остальной код инициализации UI ниже не меняется)
+
             LoadAgentConfig();
+            // Таймер автосохранения прогресса
+            var autosaveTimer = new System.Windows.Forms.Timer();
+            autosaveTimer.Interval = 10000; // 10 секунд
+            autosaveTimer.Tick += (s, e) => SaveAgentConfig();
+            autosaveTimer.Start();
+            // Подписка на изменения полей
+            txtServerIp.TextChanged += (s, e) => SaveAgentConfig();
+            txtServerPort.TextChanged += (s, e) => SaveAgentConfig();
+            txtAgentName.TextChanged += (s, e) => SaveAgentConfig();
+            numThreads.ValueChanged += (s, e) => SaveAgentConfig();
         }
 
         private void InitializeComponent()
@@ -244,6 +319,10 @@ namespace BitcoinFinder
                 // Подключаемся к серверу с параметрами агента
                 string agentName = txtAgentName.Text.Trim();
                 int threads = (int)numThreads.Value;
+                
+                // Сохраняем конфигурацию агента
+                agentController.SaveAgentConfig();
+                
                 bool connected = await agentController.ConnectAsync(ip, port, agentName, threads);
                 
                 if (connected)
@@ -493,6 +572,7 @@ namespace BitcoinFinder
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            SaveAgentConfig();
             if (agentController?.IsConnected == true)
             {
                 _ = Task.Run(async () => await agentController.DisconnectAsync());

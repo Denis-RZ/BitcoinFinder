@@ -47,10 +47,11 @@ namespace BitcoinFinder
             var buttonPanel = new TableLayoutPanel();
             buttonPanel.Dock = DockStyle.Fill;
             buttonPanel.ColumnCount = 1;
-            buttonPanel.RowCount = 3;
-            buttonPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 33F));
-            buttonPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 33F));
-            buttonPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 34F));
+            buttonPanel.RowCount = 4;
+            buttonPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
+            buttonPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
+            buttonPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
+            buttonPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
             buttonPanel.Padding = new Padding(10, 0, 10, 0);
             buttonPanel.BackColor = Color.White;
 
@@ -71,7 +72,7 @@ namespace BitcoinFinder
 
             // Кнопка агентского режима
             var btnAgent = new Button();
-            btnAgent.Text = "🤖  Режим агента";
+            btnAgent.Text = "🤖  Режим агента (TCP)";
             btnAgent.Font = new Font("Segoe UI", 15F, FontStyle.Bold);
             btnAgent.BackColor = Color.FromArgb(220, 240, 255);
             btnAgent.ForeColor = Color.DarkBlue;
@@ -83,6 +84,21 @@ namespace BitcoinFinder
             btnAgent.Cursor = Cursors.Hand;
             btnAgent.Click += BtnAgent_Click;
             buttonPanel.Controls.Add(btnAgent, 0, 1);
+
+            // Кнопка подключения агентов через Web API
+            var btnAgentWeb = new Button();
+            btnAgentWeb.Text = "🌐  Подключение агентов (Web API)";
+            btnAgentWeb.Font = new Font("Segoe UI", 15F, FontStyle.Bold);
+            btnAgentWeb.BackColor = Color.FromArgb(255, 220, 255);
+            btnAgentWeb.ForeColor = Color.DarkMagenta;
+            btnAgentWeb.Height = 50;
+            btnAgentWeb.Dock = DockStyle.Top;
+            btnAgentWeb.Margin = new Padding(0, 10, 0, 10);
+            btnAgentWeb.FlatStyle = FlatStyle.Flat;
+            btnAgentWeb.FlatAppearance.BorderSize = 0;
+            btnAgentWeb.Cursor = Cursors.Hand;
+            btnAgentWeb.Click += BtnAgentWeb_Click;
+            buttonPanel.Controls.Add(btnAgentWeb, 0, 2);
 
             // Кнопка серверного режима
             var btnServer = new Button();
@@ -97,7 +113,7 @@ namespace BitcoinFinder
             btnServer.FlatAppearance.BorderSize = 0;
             btnServer.Cursor = Cursors.Hand;
             btnServer.Click += BtnServer_Click;
-            buttonPanel.Controls.Add(btnServer, 0, 2);
+            buttonPanel.Controls.Add(btnServer, 0, 3);
 
             mainLayout.Controls.Add(buttonPanel, 0, 2);
 
@@ -131,6 +147,12 @@ namespace BitcoinFinder
         {
             var serverForm = new ServerForm();
             serverForm.Show();
+        }
+
+        private void BtnAgentWeb_Click(object? sender, EventArgs e)
+        {
+            var agentConnectionForm = new AgentConnectionForm();
+            agentConnectionForm.Show();
         }
     }
 } 

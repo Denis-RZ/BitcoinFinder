@@ -104,6 +104,11 @@ namespace BitcoinFinder
             foundResults = new List<string>();
             agentStats = new ConcurrentDictionary<string, AgentStats>();
             LoadAgentProgressStates();
+            // Таймер автосохранения состояния
+            var autosaveTimer = new System.Timers.Timer(10000); // 10 секунд
+            autosaveTimer.Elapsed += (s, e) => SaveAgentProgressStates();
+            autosaveTimer.AutoReset = true;
+            autosaveTimer.Start();
         }
 
         public async Task StartAsync(string targetBitcoinAddress, int wordCount, long? totalCombinations = null, bool enableServerSearch = true, int serverThreads = 2)
@@ -191,7 +196,7 @@ namespace BitcoinFinder
             
             serverCts?.Cancel();
             tcpListener?.Stop();
-            SaveAgentProgressStates();
+            SaveAgentProgressStates(); // Финальное сохранение
             Log("[SERVER] Сервер остановлен");
         }
         
@@ -614,6 +619,7 @@ namespace BitcoinFinder
                                 switch (command)
                                 {
                                     case "AGENT_HELLO":
+                                    case "HELLO":
                                         isEnhancedAgent = await HandleAgentHello(request, agentConnection, writer);
                                         break;
                                         
@@ -718,6 +724,7 @@ namespace BitcoinFinder
                             pendingBlocks.Enqueue(kvp.Value);
                             assignedBlocks.TryRemove(kvp.Key, out _);
                             blocksReturned++;
+                            Log($"[SERVER] Блок {kvp.Key} возвращён в очередь после отключения агента {agentId}");
                         }
                     }
                     
@@ -738,7 +745,7 @@ namespace BitcoinFinder
         {
             var validCommands = new HashSet<string>
             {
-                "AGENT_HELLO", "AGENT_GOODBYE", "HEARTBEAT", "GET_TASK", 
+                "AGENT_HELLO", "HELLO", "AGENT_GOODBYE", "HEARTBEAT", "GET_TASK", 
                 "TASK_ACCEPTED", "TASK_COMPLETED", "REPORT_PROGRESS", 
                 "REPORT_FOUND", "RELEASE_BLOCK", "PING", "PONG", "REQUEST_STATUS"
             };
@@ -795,7 +802,7 @@ namespace BitcoinFinder
                 
                 // Сохраняем информацию об агенте
                 string agentName = request.ContainsKey("agentName") ? request["agentName"].ToString()! : agent.AgentId;
-                int threads = request.ContainsKey("threads") ? Convert.ToInt32(request["threads"]) : 1;
+                int threads = request.ContainsKey("threads") ? GetInt32Value(request["threads"]) : 1;
                 
                 if (!agentProgressStates.ContainsKey(agent.AgentId))
                 {
@@ -1282,16 +1289,25 @@ namespace BitcoinFinder
                 // Ищем статистику по сетевому ID агента (agentId), а не по логическому (logicalAgentId)
                 if (agentStats.TryGetValue(agentId, out var stats))
                 {
-                    // Сохраняем предыдущее значение для корректного TotalProcessed
-                    long prevProcessed = stats.ProcessedCount;
-                    stats.ProcessedCount = processed;
+                    // Исправлено: ProcessedCount и TotalProcessed теперь отражают глобальный прогресс
+                    stats.ProcessedCount = currentIndex;
                     stats.CurrentRate = rate;
+                    stats.TotalProcessed = currentIndex;
                     stats.LastUpdate = DateTime.Now;
-                    // Увеличиваем TotalProcessed только на разницу
-                    if (processed > prevProcessed)
-                        stats.TotalProcessed += (processed - prevProcessed);
-                    
-                    Log($"[SERVER] Обновлена статистика агента {agentId}: ProcessedCount={stats.ProcessedCount:N0}, CurrentRate={stats.CurrentRate:F1}, TotalProcessed={stats.TotalProcessed:N0}");
+
+                    // ETA (оставшееся время до конца блока)
+                    double etaSeconds = -1;
+                    if (assignedBlocks.TryGetValue(blockId, out var currentBlock) && rate > 0)
+                    {
+                        etaSeconds = (currentBlock.EndIndex - currentIndex) / rate;
+                        stats.EtaSeconds = etaSeconds;
+                    }
+                    else
+                    {
+                        stats.EtaSeconds = -1;
+                    }
+
+                    Log($"[SERVER] Обновлена статистика агента {agentId}: ProcessedCount={stats.ProcessedCount:N0}, CurrentRate={stats.CurrentRate:F1}, TotalProcessed={stats.TotalProcessed:N0}, ETA={FormatEta(stats.EtaSeconds)}");
                     
                     // Сохраняем прогресс агента
                     if (agentProgressStates.ContainsKey(agentId))
@@ -1438,8 +1454,30 @@ namespace BitcoinFinder
                     {
                         if (now - agent.LastActivity > timeoutThreshold)
                         {
-                            Log($"[SERVER] Агент {agent.AgentId} не отвечает, отключение...");
+                            Log($"[SERVER] Агент {agent.AgentId} не отвечает, отключение и возврат блоков...");
                             agent.IsConnected = false;
+                            // Возвращаем все незавершённые блоки агента
+                            var blocksReturned = 0;
+                            foreach (var kvp in assignedBlocks.ToList())
+                            {
+                                if (kvp.Value.AssignedTo == agent.AgentId)
+                                {
+                                    kvp.Value.Status = BlockStatus.Pending;
+                                    kvp.Value.AssignedTo = null;
+                                    kvp.Value.AssignedAt = null;
+                                    pendingBlocks.Enqueue(kvp.Value);
+                                    assignedBlocks.TryRemove(kvp.Key, out _);
+                                    blocksReturned++;
+                                    Log($"[SERVER] Блок {kvp.Key} возвращён в очередь после таймаута агента {agent.AgentId}");
+                                }
+                            }
+                            if (blocksReturned > 0)
+                            {
+                                Log($"[SERVER] {blocksReturned} блоков возвращено в очередь после таймаута {agent.AgentId}");
+                            }
+                            connectedAgents.TryRemove(agent.AgentId, out _);
+                            agentStats.TryRemove(agent.AgentId, out _);
+                            Log($"[SERVER] Агент {agent.AgentId} отключён по таймауту");
                         }
                     }
                     
@@ -1558,6 +1596,18 @@ namespace BitcoinFinder
             if (value is long l) return l;
             return Convert.ToDouble(value);
         }
+
+        // Добавить вспомогательный метод для форматирования ETA
+        private string FormatEta(double etaSeconds)
+        {
+            if (etaSeconds < 0 || double.IsInfinity(etaSeconds) || double.IsNaN(etaSeconds)) return "?";
+            var ts = TimeSpan.FromSeconds(etaSeconds);
+            if (ts.TotalHours >= 1)
+                return $"{(int)ts.TotalHours}ч {ts.Minutes}м {ts.Seconds}с";
+            if (ts.TotalMinutes >= 1)
+                return $"{ts.Minutes}м {ts.Seconds}с";
+            return $"{ts.Seconds}с";
+        }
     }
 
     public class AgentConnection
@@ -1604,6 +1654,7 @@ namespace BitcoinFinder
         public int CompletedBlocks { get; set; }
         public long TotalProcessed { get; set; }
         public DateTime LastUpdate { get; set; }
+        public double EtaSeconds { get; set; } = -1;
     }
 
     public class ServerStats

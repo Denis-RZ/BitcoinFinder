@@ -90,7 +90,7 @@ namespace BitcoinFinder
             public DateTime LastUpdate { get; set; } = DateTime.Now;
         }
 
-        public void SaveProgress(int blockId, long currentIndex)
+                public void SaveProgress(int blockId, long currentIndex)
         {
             try
             {
@@ -104,7 +104,7 @@ namespace BitcoinFinder
                     LastIndex = currentIndex,
                     LastUpdate = DateTime.Now
                 };
-
+                
                 var json = JsonSerializer.Serialize(progress, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText("agent_config.json", json);
                 Log($"[AGENT] Прогресс сохранен: блок {blockId}, индекс {currentIndex:N0}");
@@ -114,11 +114,37 @@ namespace BitcoinFinder
                 Log($"[AGENT] Ошибка сохранения прогресса: {ex.Message}");
             }
         }
+        
+        public void SaveAgentConfig()
+        {
+            try
+            {
+                var config = new AgentProgress
+                {
+                    AgentName = AgentName,
+                    ServerIp = ServerIp,
+                    ServerPort = ServerPort,
+                    Threads = Threads,
+                    LastBlockId = -1,
+                    LastIndex = 0,
+                    LastUpdate = DateTime.Now
+                };
+                
+                var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText("agent_config.json", json);
+                Log($"[AGENT] Конфигурация агента сохранена");
+            }
+            catch (Exception ex)
+            {
+                Log($"[AGENT] Ошибка сохранения конфигурации: {ex.Message}");
+            }
+        }
 
         public AgentProgress? LoadProgress()
         {
             try
             {
+                // Пробуем загрузить из agent_config.json (новый формат)
                 if (File.Exists("agent_config.json"))
                 {
                     var json = File.ReadAllText("agent_config.json");
@@ -126,6 +152,18 @@ namespace BitcoinFinder
                     if (progress != null)
                     {
                         Log($"[AGENT] Загружен прогресс: блок {progress.LastBlockId}, индекс {progress.LastIndex:N0}");
+                        return progress;
+                    }
+                }
+                
+                // Если не найден, пробуем загрузить из старого формата
+                if (File.Exists("agent_progress.json"))
+                {
+                    var json = File.ReadAllText("agent_progress.json");
+                    var progress = JsonSerializer.Deserialize<AgentProgress>(json);
+                    if (progress != null)
+                    {
+                        Log($"[AGENT] Загружен прогресс из старого файла: блок {progress.LastBlockId}, индекс {progress.LastIndex:N0}");
                         return progress;
                     }
                 }
@@ -326,21 +364,35 @@ namespace BitcoinFinder
                     timestamp = DateTime.Now
                 };
 
+                Log($"[AGENT] Отправляем приветствие: {JsonSerializer.Serialize(helloMessage)}");
                 await SendMessage(helloMessage);
                 var response = await ReceiveMessage(token);
 
-                if (response != null && response.ContainsKey("command"))
+                if (response != null)
                 {
-                    string command = response["command"].ToString()!;
-                    if (command == "HELLO_ACK")
+                    Log($"[AGENT] Получен ответ от сервера: {JsonSerializer.Serialize(response)}");
+                    
+                    if (response.ContainsKey("command"))
                     {
-                        SetState(AgentState.Registered);
-                        Log($"Агент {agentId} зарегистрирован успешно");
-                        return true;
+                        string command = response["command"].ToString()!;
+                        if (command == "HELLO_ACK")
+                        {
+                            SetState(AgentState.Registered);
+                            Log($"Агент {agentId} зарегистрирован успешно");
+                            return true;
+                        }
+                        else if (command == "ERROR")
+                        {
+                            string errorMsg = response.ContainsKey("message") ? response["message"].ToString()! : "Unknown error";
+                            Log($"Сервер отклонил регистрацию агента: {errorMsg}");
+                        }
                     }
                 }
+                else
+                {
+                    Log("[AGENT] Не получен ответ от сервера");
+                }
                 
-                Log($"Сервер отклонил регистрацию агента: {(response?.ContainsKey("command") == true ? response["command"].ToString() : "Unknown")}");
                 return false;
             }
             catch (Exception ex)
