@@ -5,6 +5,8 @@ using System.Linq;
 using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IO;
+using System.Text.Json;
 
 namespace BitcoinFinderWebServer.Services
 {
@@ -208,12 +210,20 @@ namespace BitcoinFinderWebServer.Services
         public int Threads { get; set; } = 1;
         public string Status { get; set; } = "Pending";
         public CancellationTokenSource? Cts { get; set; }
+        public long CurrentIndex { get; set; } = 0; // Индекс последней обработанной комбинации
+        public long TotalCombinations { get; set; } = 0;
     }
 
     public class BackgroundSeedTaskManager
     {
         private readonly ConcurrentDictionary<string, BackgroundSeedTask> _tasks = new();
         private int _defaultThreads = 1;
+        private readonly string _progressFile = "background_seed_progress.json";
+
+        public BackgroundSeedTaskManager()
+        {
+            LoadProgress();
+        }
 
         public void AddTask(string seed, string? address = null, int? threads = null)
         {
@@ -224,8 +234,10 @@ namespace BitcoinFinderWebServer.Services
                 SeedPhrase = seed,
                 ExpectedAddress = address,
                 Threads = threads ?? _defaultThreads,
-                Status = "Pending"
+                Status = "Pending",
+                CurrentIndex = 0
             };
+            SaveProgress();
         }
 
         public void StartTask(string id)
@@ -235,6 +247,7 @@ namespace BitcoinFinderWebServer.Services
                 if (task.Status == "Running") return;
                 task.Cts = new CancellationTokenSource();
                 task.Status = "Running";
+                SaveProgress();
                 Task.Run(() => RunTask(task, task.Cts.Token));
             }
         }
@@ -245,6 +258,7 @@ namespace BitcoinFinderWebServer.Services
             {
                 task.Cts.Cancel();
                 task.Status = "Stopped";
+                SaveProgress();
             }
         }
 
@@ -253,6 +267,7 @@ namespace BitcoinFinderWebServer.Services
             if (_tasks.TryGetValue(id, out var task))
             {
                 task.Threads = threads;
+                SaveProgress();
             }
         }
 
@@ -260,20 +275,65 @@ namespace BitcoinFinderWebServer.Services
 
         private void RunTask(BackgroundSeedTask task, CancellationToken token)
         {
-            // Здесь должна быть логика перебора seed-фраз с учётом task.Threads
-            // Для примера — просто имитация работы
             try
             {
-                for (int i = 0; i < 100 && !token.IsCancellationRequested; i++)
+                // Получаем параметры для генерации комбинаций
+                int wordCount = 12; // TODO: получать из task/параметров
+                var englishWords = Wordlist.English.GetWords().ToArray();
+                long totalCombinations = (long)Math.Pow(englishWords.Length, wordCount);
+                task.TotalCombinations = totalCombinations;
+                long startIndex = task.CurrentIndex;
+                for (long i = startIndex; i < totalCombinations && !token.IsCancellationRequested; i++)
                 {
-                    Thread.Sleep(100);
+                    // Генерация seed-фразы по индексу i (пример, реальную логику подставить)
+                    var temp = i;
+                    var words = new string[wordCount];
+                    for (int j = 0; j < wordCount; j++)
+                    {
+                        words[j] = englishWords[temp % englishWords.Length];
+                        temp /= englishWords.Length;
+                    }
+                    // ... здесь логика проверки адреса ...
+                    task.CurrentIndex = i + 1;
+                    if (i % 100 == 0) SaveProgress(); // Периодически сохраняем прогресс
                 }
                 task.Status = token.IsCancellationRequested ? "Stopped" : "Completed";
+                SaveProgress();
             }
             catch
             {
                 task.Status = "Error";
+                SaveProgress();
             }
+        }
+
+        private void SaveProgress()
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(_tasks.Values.ToList(), new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(_progressFile, json);
+            }
+            catch { }
+        }
+
+        private void LoadProgress()
+        {
+            try
+            {
+                if (File.Exists(_progressFile))
+                {
+                    var json = File.ReadAllText(_progressFile);
+                    var list = JsonSerializer.Deserialize<List<BackgroundSeedTask>>(json);
+                    if (list != null)
+                    {
+                        _tasks.Clear();
+                        foreach (var t in list)
+                            _tasks[t.Id] = t;
+                    }
+                }
+            }
+            catch { }
         }
     }
 } 
