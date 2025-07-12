@@ -74,5 +74,44 @@ namespace BitcoinFinderWebServer.Services
             }
             await System.Threading.Tasks.Task.CompletedTask;
         }
+
+        public async Task<bool> SetAgentThreadsAsync(string agentName, int threads)
+        {
+            if (_agents.TryGetValue(agentName, out var agent))
+            {
+                agent.Threads = threads;
+                return true;
+            }
+            return false;
+        }
+
+        // Методы для Keep-Alive API
+        public string GetStatus()
+        {
+            var agents = _agents.Values.ToList();
+            var activeAgents = agents.Count(a => a.Status == "Active" || a.Status == "Connected");
+            return $"Active: {activeAgents}/{agents.Count}";
+        }
+
+        public int GetActiveAgentsCount()
+        {
+            return _agents.Values.Count(a => a.Status == "Active" || a.Status == "Connected");
+        }
+
+        public bool IsHealthy()
+        {
+            return true; // Упрощенная проверка
+        }
+
+        public async Task ActivateAsync()
+        {
+            // Активация всех агентов
+            foreach (var agent in _agents.Values)
+            {
+                agent.Status = "Active";
+                agent.LastSeen = DateTime.UtcNow;
+            }
+            await System.Threading.Tasks.Task.CompletedTask;
+        }
     }
 } 

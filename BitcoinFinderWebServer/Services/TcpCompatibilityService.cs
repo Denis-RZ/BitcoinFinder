@@ -371,9 +371,11 @@ namespace BitcoinFinderWebServer.Services
         private async Task HandleBlockRelease(Dictionary<string, object> message, string? agentId, StreamWriter writer)
         {
             var blockId = GetInt32Value(message, "blockId");
+            var currentIndex = GetInt64Value(message, "currentIndex");
 
             if (!string.IsNullOrEmpty(agentId))
             {
+                await _taskManager.ReleaseBlockAsync(blockId, agentId, currentIndex);
                 await _agentManager.UpdateAgentActivityAsync(agentId);
             }
 

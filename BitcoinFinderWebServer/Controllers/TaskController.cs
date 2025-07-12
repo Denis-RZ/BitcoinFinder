@@ -135,6 +135,21 @@ namespace BitcoinFinderWebServer.Controllers
             }
         }
 
+        [HttpPost("set-threads")]
+        public async Task<IActionResult> SetThreads([FromQuery] int threads)
+        {
+            try
+            {
+                await _taskManager.SetServerThreadsAsync(threads);
+                return Ok(new { Success = true, Threads = threads, Message = "Количество потоков сервера обновлено" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при изменении количества потоков");
+                return BadRequest(new { Success = false, Message = ex.Message });
+            }
+        }
+
         [HttpGet("validate")]
         public async Task<IActionResult> ValidateSeedPhrase([FromQuery] string seedPhrase)
         {

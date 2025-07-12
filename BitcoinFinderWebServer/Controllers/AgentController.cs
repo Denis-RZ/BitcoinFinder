@@ -250,6 +250,14 @@ namespace BitcoinFinderWebServer.Controllers
             }
         }
 
+        [HttpPatch("{agentName}/threads")]
+        public async Task<IActionResult> SetAgentThreads(string agentName, [FromBody] int threads)
+        {
+            var ok = await _agentManager.SetAgentThreadsAsync(agentName, threads);
+            if (ok) return Ok(new { success = true });
+            return NotFound(new { success = false, message = "Агент не найден" });
+        }
+
         [HttpGet("list")]
         public async Task<IActionResult> GetAgents()
         {

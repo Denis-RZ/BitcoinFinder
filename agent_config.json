@@ -1,5 +1,5 @@
 {
-  "serverIp": "122.334",
+  "serverIp": "127.0.0.1",
   "serverPort": 5000,
   "agentName": "MKDELL",
   "threads": 8

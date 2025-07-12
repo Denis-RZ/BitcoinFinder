@@ -74,5 +74,33 @@ namespace BitcoinFinderWebServer.Services
         {
             _resetTimer?.Dispose();
         }
+
+        // Методы для Keep-Alive API
+        public string GetStatus()
+        {
+            return $"Running: {_isRunning}, LastActivity: {_lastActivity:HH:mm:ss}";
+        }
+
+        public long GetTotalProcessedBlocks()
+        {
+            // Упрощенная реализация
+            return 0;
+        }
+
+        public bool IsHealthy()
+        {
+            return _isRunning;
+        }
+
+        public async Task ActivateAsync()
+        {
+            await StartAsync();
+        }
+
+        public double GetBlocksPerSecond()
+        {
+            // Упрощенная реализация
+            return 0.0;
+        }
     }
 } 

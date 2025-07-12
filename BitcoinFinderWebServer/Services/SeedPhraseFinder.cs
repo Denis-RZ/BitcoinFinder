@@ -2,6 +2,9 @@ using BitcoinFinderWebServer.Models;
 using NBitcoin;
 using System.Text;
 using System.Linq;
+using System.Collections.Concurrent;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace BitcoinFinderWebServer.Services
 {
@@ -195,5 +198,82 @@ namespace BitcoinFinderWebServer.Services
         public TimeSpan ProcessingTime { get; set; }
         public string? FoundSeedPhrase { get; set; }
         public string? FoundAddress { get; set; }
+    }
+
+    public class BackgroundSeedTask
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string SeedPhrase { get; set; } = "";
+        public string? ExpectedAddress { get; set; }
+        public int Threads { get; set; } = 1;
+        public string Status { get; set; } = "Pending";
+        public CancellationTokenSource? Cts { get; set; }
+    }
+
+    public class BackgroundSeedTaskManager
+    {
+        private readonly ConcurrentDictionary<string, BackgroundSeedTask> _tasks = new();
+        private int _defaultThreads = 1;
+
+        public void AddTask(string seed, string? address = null, int? threads = null)
+        {
+            var id = Guid.NewGuid().ToString();
+            _tasks[id] = new BackgroundSeedTask
+            {
+                Id = id,
+                SeedPhrase = seed,
+                ExpectedAddress = address,
+                Threads = threads ?? _defaultThreads,
+                Status = "Pending"
+            };
+        }
+
+        public void StartTask(string id)
+        {
+            if (_tasks.TryGetValue(id, out var task))
+            {
+                if (task.Status == "Running") return;
+                task.Cts = new CancellationTokenSource();
+                task.Status = "Running";
+                Task.Run(() => RunTask(task, task.Cts.Token));
+            }
+        }
+
+        public void StopTask(string id)
+        {
+            if (_tasks.TryGetValue(id, out var task) && task.Cts != null)
+            {
+                task.Cts.Cancel();
+                task.Status = "Stopped";
+            }
+        }
+
+        public void SetThreads(string id, int threads)
+        {
+            if (_tasks.TryGetValue(id, out var task))
+            {
+                task.Threads = threads;
+            }
+        }
+
+        public IEnumerable<BackgroundSeedTask> GetTasks() => _tasks.Values;
+
+        private void RunTask(BackgroundSeedTask task, CancellationToken token)
+        {
+            // Здесь должна быть логика перебора seed-фраз с учётом task.Threads
+            // Для примера — просто имитация работы
+            try
+            {
+                for (int i = 0; i < 100 && !token.IsCancellationRequested; i++)
+                {
+                    Thread.Sleep(100);
+                }
+                task.Status = token.IsCancellationRequested ? "Stopped" : "Completed";
+            }
+            catch
+            {
+                task.Status = "Error";
+            }
+        }
     }
 } 

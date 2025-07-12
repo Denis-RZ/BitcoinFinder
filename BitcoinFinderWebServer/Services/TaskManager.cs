@@ -290,13 +290,17 @@ namespace BitcoinFinderWebServer.Services
                 nextBlock.Status = BlockStatus.Assigned;
                 nextBlock.AssignedTo = agentName;
                 nextBlock.AssignedAt = DateTime.UtcNow;
-                nextBlock.CurrentIndex = nextBlock.StartIndex;
+                // Не сбрасываем прогресс, если этот блок уже частично обработан
+                if (nextBlock.CurrentIndex < nextBlock.StartIndex)
+                {
+                    nextBlock.CurrentIndex = nextBlock.StartIndex;
+                }
 
                 _assignedBlocks.TryAdd(nextBlock.BlockId, nextBlock);
 
                 // Обновляем состояние агента
                 agentState.LastBlockId = nextBlock.BlockId;
-                agentState.LastIndex = nextBlock.StartIndex;
+                agentState.LastIndex = nextBlock.CurrentIndex;
                 agentState.LastSeen = DateTime.UtcNow;
                 agentState.IsConnected = true;
 
@@ -407,6 +411,12 @@ namespace BitcoinFinderWebServer.Services
             agentState.DisconnectedAt = DateTime.UtcNow;
             
             _logger.LogInformation($"Агент {agentName} отключен. Последний блок: {agentState.LastBlockId}, индекс: {agentState.LastIndex}");
+
+            // Возвращаем блок в очередь, если он был назначен агенту
+            if (agentState.LastBlockId.HasValue)
+            {
+                await ReleaseBlockAsync(agentState.LastBlockId.Value, agentName, agentState.LastIndex ?? agentState.LastIndex.GetValueOrDefault(0));
+            }
             
             await System.Threading.Tasks.Task.CompletedTask;
         }
@@ -588,6 +598,77 @@ namespace BitcoinFinderWebServer.Services
             _autoSaveTimer?.Dispose();
             SaveServerState();
             SaveAgentStates();
+        }
+
+        // Методы для Keep-Alive API
+        public string GetStatus()
+        {
+            var pendingTasks = _pendingTasks.Count;
+            var completedTasks = _tasks.Values.Count(t => t.Status == "Completed");
+            return $"Pending: {pendingTasks}, Completed: {completedTasks}";
+        }
+
+        public int GetPendingTasksCount()
+        {
+            return _pendingTasks.Count;
+        }
+
+        public int GetCompletedTasksCount()
+        {
+            return _tasks.Values.Count(t => t.Status == "Completed");
+        }
+
+        public bool IsHealthy()
+        {
+            return true; // Упрощенная проверка
+        }
+
+        public async Task ActivateAsync()
+        {
+            // Активация менеджера задач
+            _isRunning = true;
+            await System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        public double GetTasksPerSecond()
+        {
+            // Упрощенная реализация
+            return 0.0;
+        }
+
+        /// <summary>
+        /// Возврат блока обратно в очередь (например при отключении агента)
+        /// </summary>
+        public async Task ReleaseBlockAsync(int blockId, string agentName, long currentIndex = 0)
+        {
+            if (_assignedBlocks.TryRemove(blockId, out var block))
+            {
+                block.Status = BlockStatus.Pending;
+                block.AssignedTo = null;
+                block.AssignedAt = null;
+                block.CurrentIndex = currentIndex > 0 ? currentIndex : block.CurrentIndex;
+                _pendingBlocks.Enqueue(block);
+                _logger.LogInformation($"Блок {blockId} возвращён в очередь сервером после отключения агента {agentName}");
+            }
+            await System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Изменение количества потоков собственного поиска сервера
+        /// </summary>
+        public async Task SetServerThreadsAsync(int threads)
+        {
+            if (threads <= 0) return;
+            if (threads == _serverThreads) return;
+
+            _logger.LogInformation($"Изменение количества потоков сервера: {_serverThreads} -> {threads}");
+            _serverThreads = threads;
+
+            if (_isRunning)
+            {
+                await StopServerSearchAsync();
+                await StartServerSearchAsync();
+            }
         }
     }
 } 
