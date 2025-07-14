@@ -1,1 +1,16 @@
-{}
+{
+  "SERVER": {
+    "AgentId": "b68cb191-d9c5-434f-b93a-d1054535c383",
+    "AgentName": "SERVER",
+    "Threads": 1,
+    "LastBlockId": null,
+    "LastIndex": 37376999,
+    "LastSeen": "2025-07-14T16:25:35.718957Z",
+    "IsConnected": true,
+    "ConnectedAt": "2025-07-14T14:32:26.5126214Z",
+    "DisconnectedAt": null,
+    "TotalProcessed": 0,
+    "CompletedBlocks": 0,
+    "CurrentRate": 0
+  }
+}

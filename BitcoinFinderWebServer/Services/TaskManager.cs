@@ -54,11 +54,11 @@ namespace BitcoinFinderWebServer.Services
             {
                 SaveServerState();
                 SaveAgentStates();
-                _logger.LogDebug("Состояние сервера автоматически сохранено");
+                _logger.LogDebug("Server state automatically saved");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при автосохранении состояния");
+                _logger.LogError(ex, "Error during state auto-save");
             }
         }
 
@@ -68,18 +68,40 @@ namespace BitcoinFinderWebServer.Services
             {
                 try
                 {
+                    // Ограничиваем количество сериализуемых блоков для экономии памяти
+                    var pendingBlocks = _pendingBlocks.ToList();
+                    var assignedBlocks = _assignedBlocks.Values.ToList();
+                    var completedBlocks = GetCompletedBlocks();
+
+                    // Сохраняем только последние 100 блоков из каждой коллекции
+                    var pendingBlocksShort = pendingBlocks
+                        .OrderByDescending(b => b.CreatedAt)
+                        .Take(100)
+                        .Select(b => new SearchBlock { BlockId = b.BlockId, CurrentIndex = b.CurrentIndex, StartIndex = b.StartIndex, EndIndex = b.EndIndex, Status = b.Status })
+                        .ToList();
+                    var assignedBlocksShort = assignedBlocks
+                        .OrderByDescending(b => b.AssignedAt)
+                        .Take(100)
+                        .Select(b => new SearchBlock { BlockId = b.BlockId, CurrentIndex = b.CurrentIndex, StartIndex = b.StartIndex, EndIndex = b.EndIndex, Status = b.Status })
+                        .ToList();
+                    var completedBlocksShort = completedBlocks
+                        .OrderByDescending(b => b.CompletedAt)
+                        .Take(100)
+                        .Select(b => new SearchBlock { BlockId = b.BlockId, CurrentIndex = b.CurrentIndex, StartIndex = b.StartIndex, EndIndex = b.EndIndex, Status = b.Status })
+                        .ToList();
+
                     var serverState = new ServerState
                     {
                         LastSaveTime = DateTime.UtcNow,
                         TotalProcessed = _totalProcessed,
                         CompletedBlocksCount = _completedBlocks,
-                        TotalBlocks = _pendingBlocks.Count + _assignedBlocks.Count + _completedBlocks,
+                        TotalBlocks = pendingBlocks.Count + assignedBlocks.Count + _completedBlocks,
                         LastProcessedIndex = GetLastProcessedIndex(),
                         FoundResults = new List<string>(_foundResults),
                         AgentStates = _agentStates.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
-                        PendingBlocks = _pendingBlocks.ToList(),
-                        AssignedBlocks = _assignedBlocks.Values.ToList(),
-                        CompletedBlocks = GetCompletedBlocks()
+                        PendingBlocks = pendingBlocksShort,
+                        AssignedBlocks = assignedBlocksShort,
+                        CompletedBlocks = completedBlocksShort
                     };
 
                     var json = JsonSerializer.Serialize(serverState, new JsonSerializerOptions { WriteIndented = true });
@@ -87,7 +109,7 @@ namespace BitcoinFinderWebServer.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Ошибка сохранения состояния сервера");
+                    _logger.LogError(ex, "Error saving server state");
                 }
             }
         }
@@ -99,28 +121,90 @@ namespace BitcoinFinderWebServer.Services
                 if (File.Exists(_stateFile))
                 {
                     var json = File.ReadAllText(_stateFile);
-                    var serverState = JsonSerializer.Deserialize<ServerState>(json);
-                    
+                    if (string.IsNullOrWhiteSpace(json))
+                    {
+                        _logger.LogWarning($"State file '{_stateFile}' is empty. Deleting and starting fresh.");
+                        File.Delete(_stateFile);
+                        return;
+                    }
+                    ServerState? serverState = null;
+                    try {
+                        serverState = JsonSerializer.Deserialize<ServerState>(json);
+                    } catch (Exception ex) {
+                        _logger.LogWarning($"State file '{_stateFile}' is invalid/corrupted: {ex.Message}. Deleting and starting fresh.");
+                        File.Delete(_stateFile);
+                        return;
+                    }
                     if (serverState != null)
                     {
+                        // Очищаем невалидные блоки из PendingBlocks, AssignedBlocks, CompletedBlocks
+                        serverState.PendingBlocks = serverState.PendingBlocks?.Where(b => !string.IsNullOrWhiteSpace(b.TargetAddress) && b.WordCount > 0).ToList() ?? new List<SearchBlock>();
+                        serverState.AssignedBlocks = serverState.AssignedBlocks?.Where(b => !string.IsNullOrWhiteSpace(b.TargetAddress) && b.WordCount > 0).ToList() ?? new List<SearchBlock>();
+                        serverState.CompletedBlocks = serverState.CompletedBlocks?.Where(b => !string.IsNullOrWhiteSpace(b.TargetAddress) && b.WordCount > 0).ToList() ?? new List<SearchBlock>();
+                        // Если после очистки нет ни одного блока — просто не создавать тестовую задачу, а ждать действий пользователя
+                        if (serverState.PendingBlocks.Count == 0 && serverState.AssignedBlocks.Count == 0 && serverState.CompletedBlocks.Count == 0)
+                        {
+                            _logger.LogWarning("No valid blocks after loading state. Waiting for user to create a new task.");
+                            return;
+                        }
                         _totalProcessed = serverState.TotalProcessed;
                         _completedBlocks = serverState.CompletedBlocksCount;
                         _foundResults.Clear();
                         _foundResults.AddRange(serverState.FoundResults);
-                        
                         // Восстанавливаем агентов
                         foreach (var agentState in serverState.AgentStates)
                         {
                             _agentStates.TryAdd(agentState.Key, agentState.Value);
                         }
-                        
-                        _logger.LogInformation($"Загружено состояние сервера: {_totalProcessed:N0} обработано, {_completedBlocks} блоков завершено");
+                        // --- Новый код: удаляем невалидные блоки и создаём тестовую задачу, если все блоки невалидны ---
+                        bool allInvalid = true;
+                        foreach (var b in serverState.PendingBlocks)
+                        {
+                            if (!string.IsNullOrWhiteSpace(b.TargetAddress) && b.WordCount > 0)
+                            {
+                                allInvalid = false;
+                                break;
+                            }
+                        }
+                        if (allInvalid)
+                        {
+                            _logger.LogWarning("All blocks are invalid after loading state. Creating a test task.");
+                            // Очищаем очереди
+                            while (_pendingBlocks.TryDequeue(out _)) { }
+                            // Создаём тестовую задачу
+                            var testParams = new SearchParameters {
+                                TargetAddress = "1MCirzugBCrn5H6jHix6PJSLX7EqUEniBQ",
+                                WordCount = 4, // Меньше слов для теста
+                                KnownWords = "",
+                                Language = "english",
+                                StartIndex = 0,
+                                EndIndex = 0,
+                                BatchSize = 1000,
+                                BlockSize = 1000,
+                                Threads = 1
+                            };
+                            var task = new SearchTask {
+                                Id = Guid.NewGuid().ToString(),
+                                Name = "TestTask",
+                                Status = "Pending",
+                                CreatedAt = DateTime.UtcNow,
+                                Parameters = testParams,
+                                EnableServerSearch = true,
+                                ServerThreads = 1
+                            };
+                            GenerateSearchBlocksAsync(task, testParams).GetAwaiter().GetResult();
+                            _tasks.TryAdd(task.Id, task);
+                            _pendingTasks.Enqueue(task);
+                            _logger.LogInformation($"Created test task {task.Id} with {task.Blocks.Count} blocks");
+                        }
+                        // --- Конец нового кода ---
+                        _logger.LogInformation($"Loaded server state: {_totalProcessed:N0} processed, {_completedBlocks} blocks completed");
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка загрузки состояния сервера");
+                _logger.LogError(ex, "Error loading server state");
             }
         }
 
@@ -136,7 +220,7 @@ namespace BitcoinFinderWebServer.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Ошибка сохранения состояний агентов");
+                    _logger.LogError(ex, "Error saving agent states");
                 }
             }
         }
@@ -157,13 +241,13 @@ namespace BitcoinFinderWebServer.Services
                             _agentStates.TryAdd(agentState.Key, agentState.Value);
                         }
                         
-                        _logger.LogInformation($"Загружены состояния {agentStates.Count} агентов");
+                        _logger.LogInformation($"Loaded {agentStates.Count} agent states");
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка загрузки состояний агентов");
+                _logger.LogError(ex, "Error loading agent states");
             }
         }
 
@@ -190,6 +274,16 @@ namespace BitcoinFinderWebServer.Services
 
         public async Task<SearchTask> CreateTaskAsync(string name, SearchParameters parameters)
         {
+            _logger.LogInformation($"CreateTaskAsync called with name='{name}'");
+            _logger.LogInformation($"Parameters validation: TargetAddress='{parameters.TargetAddress}' (IsNullOrWhiteSpace: {string.IsNullOrWhiteSpace(parameters.TargetAddress)}), WordCount={parameters.WordCount} (<=0: {parameters.WordCount <= 0})");
+            // Валидация параметров
+            if (string.IsNullOrWhiteSpace(parameters.TargetAddress) || parameters.WordCount <= 0)
+            {
+                var errorMsg = $"Task creation error: TargetAddress is empty or WordCount <= 0 (TargetAddress='{parameters.TargetAddress}', WordCount={parameters.WordCount})";
+                _logger.LogError(errorMsg);
+                throw new ArgumentException(errorMsg);
+            }
+            _logger.LogInformation($"Parameters validation passed, creating task...");
             var task = new SearchTask
             {
                 Id = Guid.NewGuid().ToString(),
@@ -200,30 +294,66 @@ namespace BitcoinFinderWebServer.Services
                 EnableServerSearch = _enableServerSearch,
                 ServerThreads = _serverThreads
             };
-
-            // Вычисляем общее количество комбинаций
-            task.TotalCombinations = await _seedPhraseFinder.CalculateTotalCombinationsAsync(parameters);
-
+            // Новый расчёт общего количества комбинаций через BigInteger
+            System.Numerics.BigInteger totalCombinationsBig = 0;
+            try
+            {
+                totalCombinationsBig = await _seedPhraseFinder.CalculateTotalCombinationsBigAsync(parameters);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"Overflow or error in CalculateTotalCombinationsBigAsync: {ex.Message}. Останавливаю создание задачи.");
+                throw;
+            }
+            if (totalCombinationsBig <= 0)
+            {
+                _logger.LogWarning($"Total combinations is too small or invalid ({totalCombinationsBig}), задача не будет создана.");
+                throw new InvalidOperationException($"Invalid total combinations: {totalCombinationsBig}");
+            }
+            // Для совместимости: если слишком много, сохраняем long.MaxValue, но не блокируем задачу
+            task.TotalCombinations = totalCombinationsBig > long.MaxValue ? long.MaxValue : (long)totalCombinationsBig;
+            _logger.LogInformation($"Calculated total combinations (Big): {totalCombinationsBig:N0}");
             // Генерируем блоки заданий для совместимости с WinForms
             await GenerateSearchBlocksAsync(task, parameters);
-
             _tasks.TryAdd(task.Id, task);
             _pendingTasks.Enqueue(task);
-
-            _logger.LogInformation($"Создана задача {task.Id}: {name} с {task.Blocks.Count} блоками");
+            _logger.LogInformation($"Created task {task.Id}: {name} with {task.Blocks.Count} blocks");
+            // После добавления задачи — всегда проверяем и запускаем серверный воркер
+            if (!_isRunning || _serverSearchTask == null || _serverSearchTask.IsCompleted)
+            {
+                _logger.LogWarning("(Re)starting server search after task creation");
+                await StartServerSearchAsync();
+            }
             return task;
         }
 
         private async Task GenerateSearchBlocksAsync(SearchTask task, SearchParameters parameters)
         {
             var blockSize = parameters.BlockSize;
-            var totalCombinations = task.TotalCombinations;
-            var currentBlockId = 1;
-
-            for (long startIndex = 0; startIndex < totalCombinations; startIndex += blockSize)
+            var wordCount = parameters.WordCount;
+            var ranges = new List<(long start, long end)>();
+            const int MaxInitialBlocks = 10000;
+            // Считаем BigInteger total местно, чтобы понять размеры
+            var totalBig = await _seedPhraseFinder.CalculateTotalCombinationsBigAsync(parameters);
+            if (totalBig <= long.MaxValue)
             {
-                var endIndex = Math.Min(startIndex + blockSize - 1, totalCombinations - 1);
-                
+                ranges = _seedPhraseFinder.GetSafeRanges(wordCount, blockSize);
+            }
+            else
+            {
+                // Ограничиваемся первыми MaxInitialBlocks диапазонами
+                long currentStart = 0;
+                for (int i = 0; i < MaxInitialBlocks; i++)
+                {
+                    long end = currentStart + blockSize - 1;
+                    ranges.Add((currentStart, end));
+                    currentStart = end + 1;
+                }
+                _logger.LogWarning($"Total combinations огромные. Сгенерировано только {MaxInitialBlocks} стартовых блоков. Будут добавляться по мере обработки.");
+            }
+            var currentBlockId = 1;
+            foreach (var (startIndex, endIndex) in ranges)
+            {
                 var block = new SearchBlock
                 {
                     BlockId = currentBlockId++,
@@ -235,12 +365,10 @@ namespace BitcoinFinderWebServer.Services
                     CreatedAt = DateTime.UtcNow,
                     Priority = CalculateBlockPriority(startIndex, endIndex)
                 };
-
                 task.Blocks.Add(block);
                 _pendingBlocks.Enqueue(block);
             }
-
-            _logger.LogInformation($"Сгенерировано {task.Blocks.Count} блоков для задачи {task.Id}");
+            _logger.LogInformation($"Generated {task.Blocks.Count} blocks for task {task.Id}");
         }
 
         private int CalculateBlockPriority(long startIndex, long endIndex)
@@ -259,7 +387,7 @@ namespace BitcoinFinderWebServer.Services
                 task.StartedAt = DateTime.UtcNow;
                 task.AssignedTo = agentName;
 
-                _logger.LogInformation($"Задача {task.Id} назначена агенту {agentName}");
+                _logger.LogInformation($"Task {task.Id} assigned to agent {agentName}");
                 return await System.Threading.Tasks.Task.FromResult(task);
             }
 
@@ -277,7 +405,7 @@ namespace BitcoinFinderWebServer.Services
                 {
                     if (lastBlock.AssignedTo == agentName && lastBlock.Status == BlockStatus.Assigned)
                     {
-                        _logger.LogInformation($"Агент {agentName} продолжает работу с блока {lastBlock.BlockId} с индекса {agentState.LastIndex.Value}");
+                        _logger.LogInformation($"Agent {agentName} continues with block {lastBlock.BlockId} from index {agentState.LastIndex.Value}");
                         return lastBlock;
                     }
                 }
@@ -304,7 +432,7 @@ namespace BitcoinFinderWebServer.Services
                 agentState.LastSeen = DateTime.UtcNow;
                 agentState.IsConnected = true;
 
-                _logger.LogInformation($"Блок {nextBlock.BlockId} назначен агенту {agentName}");
+                _logger.LogInformation($"Block {nextBlock.BlockId} assigned to agent {agentName}");
                 return await System.Threading.Tasks.Task.FromResult(nextBlock);
             }
 
@@ -349,7 +477,7 @@ namespace BitcoinFinderWebServer.Services
 
         public async Task ProcessTaskResultAsync(string agentName, object result)
         {
-            _logger.LogInformation($"Получен результат от агента {agentName}");
+            _logger.LogInformation($"Received result from agent {agentName}");
             await System.Threading.Tasks.Task.CompletedTask;
         }
 
@@ -378,12 +506,12 @@ namespace BitcoinFinderWebServer.Services
                 // Если найдено решение
                 if (!string.IsNullOrEmpty(result.FoundSeedPhrase))
                 {
-                    var foundResult = $"Найдено! Seed: {result.FoundSeedPhrase}, Address: {result.FoundAddress}, Index: {result.FoundIndex}";
+                    var foundResult = $"Found! Seed: {result.FoundSeedPhrase}, Address: {result.FoundAddress}, Index: {result.FoundIndex}";
                     _foundResults.Add(foundResult);
-                    _logger.LogWarning($"НАЙДЕНО РЕШЕНИЕ: {foundResult}");
+                    _logger.LogWarning($"FOUND SOLUTION: {foundResult}");
                 }
 
-                _logger.LogInformation($"Блок {result.BlockId} завершен агентом {agentName}");
+                _logger.LogInformation($"Block {result.BlockId} completed by agent {agentName}");
             }
 
             await System.Threading.Tasks.Task.CompletedTask;
@@ -400,6 +528,16 @@ namespace BitcoinFinderWebServer.Services
                 var agentState = GetOrCreateAgentState(block.AssignedTo ?? "");
                 agentState.LastIndex = currentIndex;
                 agentState.LastSeen = DateTime.UtcNow;
+
+                // --- Новый код: обновляем ProcessedCombinations у задачи ---
+                // Найти задачу, которой принадлежит этот блок
+                var task = _tasks.Values.FirstOrDefault(t => t.Parameters.TargetAddress == block.TargetAddress);
+                if (task != null)
+                {
+                    // Суммировать CurrentIndex по всем её блокам
+                    task.ProcessedCombinations = task.Blocks.Sum(b => b.CurrentIndex - b.StartIndex + 1);
+                }
+                // --- Конец нового кода ---
             }
             await System.Threading.Tasks.Task.CompletedTask;
         }
@@ -410,7 +548,7 @@ namespace BitcoinFinderWebServer.Services
             agentState.IsConnected = false;
             agentState.DisconnectedAt = DateTime.UtcNow;
             
-            _logger.LogInformation($"Агент {agentName} отключен. Последний блок: {agentState.LastBlockId}, индекс: {agentState.LastIndex}");
+            _logger.LogInformation($"Agent {agentName} disconnected. Last block: {agentState.LastBlockId}, index: {agentState.LastIndex}");
 
             // Возвращаем блок в очередь, если он был назначен агенту
             if (agentState.LastBlockId.HasValue)
@@ -428,7 +566,7 @@ namespace BitcoinFinderWebServer.Services
             agentState.ConnectedAt = DateTime.UtcNow;
             agentState.LastSeen = DateTime.UtcNow;
             
-            _logger.LogInformation($"Агент {agentName} переподключен");
+            _logger.LogInformation($"Agent {agentName} reconnected");
             
             await System.Threading.Tasks.Task.CompletedTask;
         }
@@ -480,7 +618,7 @@ namespace BitcoinFinderWebServer.Services
                 task.FoundSeedPhrase = foundSeedPhrase;
                 task.FoundAddress = foundAddress;
 
-                _logger.LogInformation($"Задача {taskId} завершена");
+                _logger.LogInformation($"Task {taskId} completed");
             }
             await System.Threading.Tasks.Task.CompletedTask;
         }
@@ -497,7 +635,7 @@ namespace BitcoinFinderWebServer.Services
             if (_enableServerSearch)
             {
                 _serverSearchTask = RunServerSearchAsync(_serverCts.Token);
-                _logger.LogInformation($"Запущен собственный поиск сервера с {_serverThreads} потоками");
+                _logger.LogInformation($"Started server search with {_serverThreads} threads");
             }
 
             await System.Threading.Tasks.Task.CompletedTask;
@@ -514,7 +652,7 @@ namespace BitcoinFinderWebServer.Services
             SaveServerState();
             SaveAgentStates();
             
-            _logger.LogInformation("Собственный поиск сервера остановлен");
+            _logger.LogInformation("Stopped server search");
 
             await System.Threading.Tasks.Task.CompletedTask;
         }
@@ -534,7 +672,7 @@ namespace BitcoinFinderWebServer.Services
 
         private async Task ServerSearchWorkerAsync(int threadId, CancellationToken token)
         {
-            _logger.LogInformation($"Запущен поток поиска сервера {threadId}");
+            _logger.LogInformation($"Started server search worker thread {threadId}");
 
             while (!token.IsCancellationRequested)
             {
@@ -545,25 +683,68 @@ namespace BitcoinFinderWebServer.Services
                     continue;
                 }
 
-                // Здесь должна быть логика поиска
-                // Пока просто помечаем блок как завершенный
+                // Find parent task for this block
+                SearchTask? parentTask = null;
+                foreach (var t in _tasks.Values)
+                {
+                    if (t.Blocks.Any(b => b.BlockId == block.BlockId))
+                    {
+                        parentTask = t;
+                        break;
+                    }
+                }
+
+                long processed = 0;
+                for (long i = block.StartIndex; i <= block.EndIndex && !token.IsCancellationRequested; i++)
+                {
+                    block.CurrentIndex = i;
+                    processed++;
+                    // Формируем seed-фразу и добавляем в очередь последних фраз
+                    var temp = i;
+                    var words = new string[block.WordCount];
+                    for (int j = 0; j < block.WordCount; j++)
+                    {
+                        words[j] = _seedPhraseFinder.GetEnglishWordByIndex((int)(temp % 2048));
+                        temp /= 2048;
+                    }
+                    var seedPhrase = string.Join(" ", words);
+                    _seedPhraseFinder.AddLastSeedPhrase(seedPhrase);
+                    if (parentTask != null)
+                    {
+                        parentTask.ProcessedCombinations++;
+                    }
+                    if (processed % 1000 == 0)
+                    {
+                        await UpdateBlockProgressAsync(block.BlockId, block.CurrentIndex);
+                    }
+                }
                 block.Status = BlockStatus.Completed;
                 block.CompletedAt = DateTime.UtcNow;
                 _completedBlocks++;
-
-                await Task.Delay(100, token); // Имитация работы
+                await UpdateBlockProgressAsync(block.BlockId, block.EndIndex);
             }
         }
 
         private SearchBlock? GetNextBlockForServer()
         {
-            if (_pendingBlocks.TryDequeue(out var block))
+            // Сначала пробуем взять из очереди
+            while (_pendingBlocks.TryDequeue(out var block))
             {
+                if (string.IsNullOrWhiteSpace(block.TargetAddress) || block.WordCount <= 0)
+                {
+                    _logger.LogWarning($"Block {block.BlockId} skipped: TargetAddress is empty or WordCount <= 0");
+                    continue;
+                }
                 block.Status = BlockStatus.Assigned;
                 block.AssignedTo = "SERVER";
                 block.AssignedAt = DateTime.UtcNow;
+                _assignedBlocks.TryAdd(block.BlockId, block);
                 return block;
             }
+            // Если очередь пуста — ищем незавершённый блок, назначенный серверу
+            var assigned = _assignedBlocks.Values.FirstOrDefault(b => b.AssignedTo == "SERVER" && b.Status != BlockStatus.Completed);
+            if (assigned != null)
+                return assigned;
             return null;
         }
 
@@ -648,7 +829,7 @@ namespace BitcoinFinderWebServer.Services
                 block.AssignedAt = null;
                 block.CurrentIndex = currentIndex > 0 ? currentIndex : block.CurrentIndex;
                 _pendingBlocks.Enqueue(block);
-                _logger.LogInformation($"Блок {blockId} возвращён в очередь сервером после отключения агента {agentName}");
+                _logger.LogInformation($"Block {blockId} returned to queue by server after agent {agentName} disconnected");
             }
             await System.Threading.Tasks.Task.CompletedTask;
         }
@@ -661,7 +842,7 @@ namespace BitcoinFinderWebServer.Services
             if (threads <= 0) return;
             if (threads == _serverThreads) return;
 
-            _logger.LogInformation($"Изменение количества потоков сервера: {_serverThreads} -> {threads}");
+            _logger.LogInformation($"Changing server threads: {_serverThreads} -> {threads}");
             _serverThreads = threads;
 
             if (_isRunning)

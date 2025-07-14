@@ -1,0 +1,398 @@
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Управление базой данных";
+}
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+}
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+.header {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    padding: 30px;
+    text-align: center;
+}
+.header h1 {
+    font-size: 2.5em;
+    margin-bottom: 10px;
+}
+.header p {
+    font-size: 1.1em;
+    opacity: 0.9;
+}
+.content {
+    padding: 40px;
+}
+.form-section {
+    margin-bottom: 40px;
+    padding: 30px;
+    border: 1px solid #e1e8ed;
+    border-radius: 10px;
+    background: #f8f9fa;
+}
+.form-section h2 {
+    color: #2c3e50;
+    margin-bottom: 20px;
+    font-size: 1.5em;
+}
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+.form-group {
+    margin-bottom: 20px;
+}
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+.checkbox-group input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-right: 10px;
+    margin-bottom: 10px;
+}
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+.btn-secondary:hover {
+    background: #5a6268;
+}
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+.btn-success:hover {
+    background: #218838;
+}
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+.btn-danger:hover {
+    background: #c82333;
+}
+.status {
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: none;
+}
+.status.success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+.status.error {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+}
+.status.warning {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    color: #856404;
+}
+.loading {
+    display: none;
+    text-align: center;
+    padding: 20px;
+}
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #667eea;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    /* animation: spin 1s linear infinite; */
+    margin: 0 auto 10px;
+}
+.log-container {
+    background: #2c3e50;
+    color: #ecf0f1;
+    padding: 20px;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 20px;
+}
+.log-entry {
+    margin-bottom: 5px;
+    padding: 5px;
+    border-radius: 4px;
+}
+.log-entry.info {
+    background: rgba(52, 152, 219, 0.2);
+}
+.log-entry.success {
+    background: rgba(46, 204, 113, 0.2);
+}
+.log-entry.error {
+    background: rgba(231, 76, 60, 0.2);
+}
+.log-entry.warning {
+    background: rgba(243, 156, 18, 0.2);
+}
+.tabs {
+    display: flex;
+    border-bottom: 2px solid #e1e8ed;
+    margin-bottom: 30px;
+}
+.tab {
+    padding: 15px 30px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+    font-weight: 600;
+}
+.tab.active {
+    border-bottom-color: #667eea;
+    color: #667eea;
+}
+.tab:hover {
+    background: #f8f9fa;
+}
+.tab-content {
+    display: none;
+}
+.tab-content.active {
+    display: block;
+}
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+.metric-card {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    text-align: center;
+}
+.metric-value {
+    font-size: 2em;
+    font-weight: bold;
+    color: #667eea;
+    margin-bottom: 5px;
+}
+.metric-label {
+    color: #6c757d;
+    font-size: 0.9em;
+}
+</style>
+<div class="container">
+    <div class="header">
+        <h1>🔧 Установка базы данных</h1>
+        <p>BitcoinFinder Web Server - Административная панель</p>
+    </div>
+    <div class="content">
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('setup')">Установка БД</div>
+            <div class="tab" onclick="showTab('seed')">Перебор Seed-фраз</div>
+            <div class="tab" onclick="showTab('agents')">Агенты</div>
+            <div class="tab" onclick="showTab('status')">Статус системы</div>
+            <div class="tab" onclick="showTab('keepalive')">Keep-Alive</div>
+        </div>
+        <!-- Вкладка установки базы данных -->
+        <div id="setup" class="tab-content active">
+            <div class="form-section">
+                <h2>📊 Конфигурация базы данных</h2>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="databaseName">Имя базы данных *</label>
+                        <input type="text" id="databaseName" value="BitcoinFinderDB" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="server">Сервер *</label>
+                        <input type="text" id="server" value="localhost" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="port">Порт *</label>
+                        <input type="number" id="port" value="1433" min="1" max="65535" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="username">Имя пользователя</label>
+                        <input type="text" id="username" placeholder="sa">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Пароль</label>
+                        <input type="password" id="password" placeholder="Введите пароль">
+                    </div>
+                    <div class="form-group">
+                        <label for="authType">Тип аутентификации</label>
+                        <select id="authType" onchange="toggleAuthFields()">
+                            <option value="sql">SQL Server Authentication</option>
+                            <option value="windows">Windows Authentication</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="createDatabase" checked>
+                    <label for="createDatabase">Создать базу данных</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="installSchema" checked>
+                    <label for="installSchema">Установить схему</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="installSeedData">
+                    <label for="installSeedData">Установить начальные данные</label>
+                </div>
+                <div class="status" id="setupStatus"></div>
+                <div class="loading" id="setupLoading">
+                    <div class="spinner"></div>
+                    <p>Выполняется установка базы данных...</p>
+                </div>
+                <button class="btn btn-primary" onclick="testConnection()">🔍 Тест подключения</button>
+                <button class="btn btn-success" onclick="installDatabase()">🚀 Установить базу данных</button>
+                <button class="btn btn-secondary" onclick="getSchemaInfo()">📋 Информация о схеме</button>
+            </div>
+            <div class="log-container" id="setupLog"></div>
+        </div>
+        <!-- Вкладка перебора seed-фраз -->
+        <div id="seed" class="tab-content">
+            <div class="form-section">
+                <h2>🔑 Перебор Seed-фраз</h2>
+                <div class="form-group">
+                    <label for="seedPhrase">Seed-фраза (или маска)</label>
+                    <input type="text" id="seedPhrase" placeholder="Введите seed-фразу или маску">
+                </div>
+                <div class="form-group">
+                    <label for="address">Ожидаемый адрес (опционально)</label>
+                    <input type="text" id="address" placeholder="1...">
+                </div>
+                <button class="btn btn-primary" onclick="startSeedSearch()">🚀 Начать перебор</button>
+                <button class="btn btn-secondary" onclick="stopSeedSearch()">⏹️ Остановить</button>
+                <div class="status" id="seedStatus"></div>
+                <div class="log-container" id="seedLog"></div>
+            </div>
+            <div class="form-section">
+                <h2>📝 Добавить задачу (seed-фразу)</h2>
+                <div class="form-group">
+                    <input type="text" id="newSeedTask" placeholder="Введите seed-фразу или маску">
+                    <button class="btn btn-success" onclick="addSeedTask()">Добавить задачу</button>
+                </div>
+                <div class="log-container" id="seedTaskLog"></div>
+            </div>
+            <div class="form-section">
+                <h2>📋 Активные задачи перебора</h2>
+                <table style="width:100%;background:#fff;color:#222;border-radius:8px;overflow:hidden;">
+                    <thead><tr><th>Seed-фраза</th><th>Статус</th><th>Потоки</th><th>Действия</th></tr></thead>
+                    <tbody id="seedTasksTable"></tbody>
+                </table>
+            </div>
+        </div>
+        <!-- Вкладка агентов -->
+        <div id="agents" class="tab-content">
+            <div class="form-section">
+                <h2>🤖 Управление агентами</h2>
+                <button class="btn btn-primary" onclick="loadAgents()">🔄 Обновить список</button>
+                <div class="status" id="agentsStatus"></div>
+                <table style="width:100%;margin-top:20px;background:#fff;color:#222;border-radius:8px;overflow:hidden;">
+                    <thead><tr><th>Имя</th><th>Статус</th><th>Потоки</th><th>Последний онлайн</th><th>Действия</th></tr></thead>
+                    <tbody id="agentsTable"></tbody>
+                </table>
+            </div>
+        </div>
+        <!-- Вкладка статуса системы -->
+        <div id="status" class="tab-content">
+            <div class="form-section">
+                <h2>📈 Статус системы</h2>
+                <div class="metrics-grid" id="metricsGrid">
+                    <!-- Метрики будут загружены динамически -->
+                </div>
+                <div class="status" id="statusStatus"></div>
+                <div class="loading" id="statusLoading">
+                    <div class="spinner"></div>
+                    <p>Загрузка статуса системы...</p>
+                </div>
+                <button class="btn btn-primary" onclick="loadSystemStatus()">🔄 Обновить статус</button>
+                <button class="btn btn-success" onclick="loadHealthCheck()">🏥 Проверка здоровья</button>
+                <button class="btn btn-secondary" onclick="loadMetrics()">📊 Метрики</button>
+            </div>
+            <div class="log-container" id="statusLog"></div>
+        </div>
+        <!-- Вкладка Keep-Alive -->
+        <div id="keepalive" class="tab-content">
+            <div class="form-section">
+                <h2>💓 Keep-Alive мониторинг</h2>
+                <div class="status" id="keepaliveStatus"></div>
+                <div class="loading" id="keepaliveLoading">
+                    <div class="spinner"></div>
+                    <p>Проверка активности сервера...</p>
+                </div>
+                <button class="btn btn-primary" onclick="pingServer()">🏓 Ping сервера</button>
+                <button class="btn btn-success" onclick="activateServices()">⚡ Активировать сервисы</button>
+                <button class="btn btn-secondary" onclick="startKeepAlive()">🔄 Запустить мониторинг</button>
+                <button class="btn btn-danger" onclick="stopKeepAlive()">⏹️ Остановить мониторинг</button>
+            </div>
+            <div class="log-container" id="keepaliveLog"></div>
+        </div>
+    </div>
+</div>
+<script>
+// Вставлен весь JS из legacy-файла
+let keepAliveInterval = null;
+const baseUrl = window.location.origin;
+// ... (оставшийся JS из legacy-файла, как в предыдущем файле) ...
+</script> 

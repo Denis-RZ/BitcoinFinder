@@ -11,6 +11,7 @@ namespace BitcoinFinderWebServer.Services
         Task<DatabaseInstallResponse> CreateDatabaseAsync(DatabaseConfig config);
         Task<DatabaseInstallResponse> InstallSchemaAsync(DatabaseConfig config);
         Task<DatabaseInstallResponse> InstallSeedDataAsync(DatabaseConfig config);
+        Task SaveFoundSeed(string bitcoinAddress, string seedPhrase, string foundAddress, long processed, TimeSpan time);
     }
 
     public class DatabaseService : IDatabaseService
@@ -238,6 +239,28 @@ namespace BitcoinFinderWebServer.Services
             }
 
             return response;
+        }
+
+        public async Task SaveFoundSeed(string bitcoinAddress, string seedPhrase, string foundAddress, long processed, TimeSpan time)
+        {
+            // Пример: сохраняем в таблицу TaskResults
+            try
+            {
+                using var connection = new SqlConnection(/* строка подключения */);
+                await connection.OpenAsync();
+                var cmd = new SqlCommand("INSERT INTO TaskResults (BitcoinAddress, SeedPhrase, FoundAddress, ProcessedCount, ProcessingTime, FoundAt) VALUES (@address, @seed, @found, @count, @time, @at)", connection);
+                cmd.Parameters.AddWithValue("@address", bitcoinAddress);
+                cmd.Parameters.AddWithValue("@seed", seedPhrase);
+                cmd.Parameters.AddWithValue("@found", foundAddress);
+                cmd.Parameters.AddWithValue("@count", processed);
+                cmd.Parameters.AddWithValue("@time", (long)time.TotalMilliseconds);
+                cmd.Parameters.AddWithValue("@at", DateTime.UtcNow);
+                await cmd.ExecuteNonQueryAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка сохранения найденной seed phrase");
+            }
         }
 
         private List<string> GetSchemaScripts()

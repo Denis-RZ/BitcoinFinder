@@ -33,6 +33,7 @@ namespace BitcoinFinderWebServer.Models
         public long EndIndex { get; set; } = 0;
         public int BatchSize { get; set; } = 1000;
         public long BlockSize { get; set; } = 100000; // Размер блока для совместимости
+        public int Threads { get; set; } = 1;
     }
 
     // Модели для совместимости с WinForms DistributedServer

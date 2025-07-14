@@ -1,0 +1,193 @@
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Поиск Seed Phrase";
+}
+<div class="row">
+    <div class="col-md-12">
+        <h2>Поиск Seed Phrase</h2>
+        <p>Создание новой задачи поиска по адресу</p>
+    </div>
+</div>
+<div class="row mt-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Параметры поиска</h5>
+                <form id="searchForm">
+                    <div class="mb-3">
+                        <label for="targetAddress" class="form-label">Целевой адрес</label>
+                        <input type="text" class="form-control" id="targetAddress" name="targetAddress" placeholder="1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" required>
+                        <div class="form-text">Bitcoin адрес для поиска</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="wordCount" class="form-label">Количество слов</label>
+                        <input type="number" class="form-control" id="wordCount" name="wordCount" value="12" min="1" max="24">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="threads" class="form-label">Количество потоков</label>
+                                <input type="number" class="form-control" id="threads" name="threads" value="4" min="1" max="16">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="maxAttempts" class="form-label">Максимум попыток</label>
+                                <input type="number" class="form-control" id="maxAttempts" name="maxAttempts" value="1000000" min="1000">
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Начать поиск</button>
+                    <button type="button" class="btn btn-secondary" onclick="clearForm()">Очистить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Статус поиска</h5>
+                <div id="searchStatus">
+                    <p class="text-muted">Поиск не запущен</p>
+                </div>
+                <div id="searchProgress" style="display: none;">
+                    <div class="progress mb-3">
+                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p id="progressText">Попыток: 0</p>
+                    <button type="button" class="btn btn-danger" onclick="stopSearch()">Остановить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Лог поиска</h5>
+                <div id="searchLog" style="height: 200px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; font-family: monospace;">
+                    <p class="text-muted">Лог будет отображаться здесь...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="card mt-4">
+  <div class="card-header"><b>Текущие перебираемые фразы</b></div>
+  <div class="card-body">
+    <div id="currentPhrasesBlock">
+      <div>Загрузка...</div>
+    </div>
+  </div>
+</div>
+<script>
+let currentTaskId = null;
+let pollingInterval = null;
+function clearForm() {
+    document.getElementById('searchForm').reset();
+    document.getElementById('searchStatus').innerHTML = '<p class="text-muted">Поиск не запущен</p>';
+    document.getElementById('searchProgress').style.display = 'none';
+    document.getElementById('searchLog').innerHTML = '<p class="text-muted">Лог будет отображаться здесь...</p>';
+    if (pollingInterval) clearInterval(pollingInterval);
+}
+function addLog(message) {
+    const log = document.getElementById('searchLog');
+    const time = new Date().toLocaleTimeString();
+    log.innerHTML += `<div>[${time}] ${message}</div>`;
+    log.scrollTop = log.scrollHeight;
+}
+document.getElementById('searchForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    addLog('Запуск поиска...');
+    document.getElementById('searchStatus').innerHTML = '<p class="text-success">Поиск запущен</p>';
+    document.getElementById('searchProgress').style.display = 'block';
+    fetch('/api/task/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            Name: 'SeedSearch',
+            TargetAddress: data.targetAddress,
+            KnownWords: '',
+            WordCount: Number(data.wordCount),
+            Language: 'english',
+            StartIndex: 0,
+            EndIndex: 0,
+            BatchSize: Number(data.maxAttempts),
+            BlockSize: 100000,
+            Threads: Number(data.threads)
+        })
+    })
+    .then(async response => {
+        const text = await response.text();
+        let result = {};
+        try {
+            result = text ? JSON.parse(text) : {};
+        } catch (e) {
+            addLog('Ошибка парсинга JSON: ' + e.message);
+            return;
+        }
+        if (result.success) {
+            addLog(`Задача создана: ${result.taskId}`);
+            currentTaskId = result.taskId;
+            startPolling();
+        } else {
+            addLog('Ошибка создания задачи: ' + (result.message || 'Unknown error'));
+            addLog('Детали ошибки: ' + JSON.stringify(result, null, 2));
+        }
+    })
+    .catch(error => {
+        addLog(`Ошибка: ${error.message}`);
+    });
+});
+function startPolling() {
+    if (pollingInterval) clearInterval(pollingInterval);
+    pollingInterval = setInterval(() => {
+        if (!currentTaskId) return;
+        fetch(`/api/tasks/${currentTaskId}`)
+            .then(r => r.json())
+            .then(task => {
+                document.getElementById('progressText').innerText = `Попыток: ${task.ProcessedCombinations}`;
+                addLog(`Проверено комбинаций: ${task.ProcessedCombinations}`);
+                if (task.Status === 'Completed') {
+                    addLog('Поиск завершён.');
+                    if (task.FoundSeedPhrase) {
+                        addLog('Найдено! Seed: ' + task.FoundSeedPhrase + ', Address: ' + task.FoundAddress);
+                    }
+                    clearInterval(pollingInterval);
+                }
+            });
+    }, 2000);
+}
+function stopSearch() {
+    addLog('Остановка поиска...');
+    document.getElementById('searchStatus').innerHTML = '<p class="text-muted">Поиск остановлен</p>';
+    document.getElementById('searchProgress').style.display = 'none';
+    if (pollingInterval) clearInterval(pollingInterval);
+}
+function updateCurrentPhrases() {
+  fetch('/api/task/progress/current')
+    .then(r => r.json())
+    .then(data => {
+      let html = '';
+      if (data.LastPhrases && data.LastPhrases.length > 0) {
+        html += `<div><b>Последний индекс:</b> ${data.LastSavedIndex}</div>`;
+        html += '<ol>';
+        for (let phrase of data.LastPhrases) {
+          html += `<li style="font-family:monospace;font-size:13px;">${phrase}</li>`;
+        }
+        html += '</ol>';
+      } else {
+        html = 'Нет данных.';
+      }
+      document.getElementById('currentPhrasesBlock').innerHTML = html;
+    })
+    .catch(() => {
+      document.getElementById('currentPhrasesBlock').innerHTML = 'Ошибка получения данных.';
+    });
+}
+setInterval(updateCurrentPhrases, 3000);
+updateCurrentPhrases();
+</script> 

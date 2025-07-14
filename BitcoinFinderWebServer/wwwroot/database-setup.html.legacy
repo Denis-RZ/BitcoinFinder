@@ -631,8 +631,13 @@
                     },
                     body: JSON.stringify(request)
                 });
-
-                const result = await response.json();
+                let result = null;
+                try {
+                    const text = await response.text();
+                    result = text ? JSON.parse(text) : {};
+                } catch (e) {
+                    result = { success: false, message: 'Ошибка парсинга JSON: ' + e.message };
+                }
                 
                 if (response.ok) {
                     showStatus('✅ База данных успешно установлена', 'success', 'setupStatus');
@@ -924,17 +929,25 @@
                     BlockSize: 100000
                 })
             })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    showStatus('Задача создана. ID: ' + data.taskId, 'success', 'seedStatus');
-                    log('Задача создана. ID: ' + data.taskId, 'success', 'seedLog');
+            .then(async r => {
+                const text = await r.text();
+                let result = {};
+                try {
+                    result = text ? JSON.parse(text) : {};
+                } catch (e) {
+                    showStatus('Ошибка парсинга JSON: ' + e.message, 'error', 'seedStatus');
+                    log('Ошибка парсинга JSON: ' + e.message, 'error', 'seedLog');
+                    return;
+                }
+                if (result.success) {
+                    showStatus('Задача создана. ID: ' + result.taskId, 'success', 'seedStatus');
+                    log('Задача создана. ID: ' + result.taskId, 'success', 'seedLog');
                     document.getElementById('seedPhrase').value = '';
                     document.getElementById('address').value = '';
                     loadSeedTasks();
                 } else {
-                    showStatus('Ошибка создания задачи: ' + (data.message || 'Неизвестная ошибка'), 'error', 'seedStatus');
-                    log('Ошибка создания задачи: ' + (data.message || 'Неизвестная ошибка'), 'error', 'seedLog');
+                    showStatus('Ошибка создания задачи: ' + (result.message || 'Неизвестная ошибка'), 'error', 'seedStatus');
+                    log('Ошибка создания задачи: ' + (result.message || 'Неизвестная ошибка'), 'error', 'seedLog');
                 }
             })
             .catch(e => {

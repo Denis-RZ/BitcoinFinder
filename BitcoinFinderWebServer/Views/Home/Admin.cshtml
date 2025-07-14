@@ -1,0 +1,205 @@
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Админ панель";
+}
+
+<div class="row">
+    <div class="col-md-12">
+        <h2>Админ панель</h2>
+        <p>Управление системой BitcoinFinder</p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Настройки аутентификации</h5>
+                <form id="authConfigForm">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Имя пользователя</label>
+                        <input type="text" class="form-control" id="username" name="username" value="admin">
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Новый пароль</label>
+                        <input type="password" class="form-control" id="password" name="password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirmPassword" class="form-label">Подтвердите пароль</label>
+                        <input type="password" class="form-control" id="confirmPassword" name="confirmPassword">
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="requireAuth" name="requireAuth" checked>
+                        <label class="form-check-label" for="requireAuth">Требовать аутентификацию</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Сохранить настройки</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Управление системой</h5>
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-warning" onclick="restartSystem()">Перезапустить систему</button>
+                    <button type="button" class="btn btn-info" onclick="clearLogs()">Очистить логи</button>
+                    <button type="button" class="btn btn-secondary" onclick="backupData()">Создать резервную копию</button>
+                    <button type="button" class="btn btn-danger" onclick="stopAllTasks()">Остановить все задачи</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-body">
+                <h5 class="card-title">Системная информация</h5>
+                <div id="systemInfo">
+                    <p><strong>Версия:</strong> <span id="version">1.0.0</span></p>
+                    <p><strong>Время работы:</strong> <span id="uptime">Загрузка...</span></p>
+                    <p><strong>Использование памяти:</strong> <span id="memory">Загрузка...</span></p>
+                    <p><strong>Активные задачи:</strong> <span id="activeTasks">Загрузка...</span></p>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="refreshSystemInfo()">Обновить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Системные логи</h5>
+                <div id="systemLogs" style="height: 300px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; font-family: monospace; font-size: 12px;">
+                    <p class="text-muted">Логи загружаются...</p>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="refreshLogs()">Обновить логи</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function restartSystem() {
+    if (confirm('Вы уверены, что хотите перезапустить систему?')) {
+        fetch('/api/admin/restart', { method: 'POST' })
+            .then(response => response.json())
+            .then(result => {
+                alert('Система перезапущена');
+                location.reload();
+            })
+            .catch(error => {
+                alert('Ошибка: ' + error.message);
+            });
+    }
+}
+
+function clearLogs() {
+    if (confirm('Очистить все логи?')) {
+        fetch('/api/admin/clear-logs', { method: 'POST' })
+            .then(response => response.json())
+            .then(result => {
+                alert('Логи очищены');
+                refreshLogs();
+            })
+            .catch(error => {
+                alert('Ошибка: ' + error.message);
+            });
+    }
+}
+
+function backupData() {
+    fetch('/api/admin/backup', { method: 'POST' })
+        .then(response => response.blob())
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'bitcoinfinder-backup-' + new Date().toISOString().split('T')[0] + '.zip';
+            a.click();
+        })
+        .catch(error => {
+            alert('Ошибка: ' + error.message);
+        });
+}
+
+function stopAllTasks() {
+    if (confirm('Остановить все активные задачи?')) {
+        fetch('/api/admin/stop-all-tasks', { method: 'POST' })
+            .then(response => response.json())
+            .then(result => {
+                alert('Все задачи остановлены');
+                refreshSystemInfo();
+            })
+            .catch(error => {
+                alert('Ошибка: ' + error.message);
+            });
+    }
+}
+
+function refreshSystemInfo() {
+    fetch('/api/admin/system-info')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('uptime').textContent = data.uptime;
+            document.getElementById('memory').textContent = data.memory;
+            document.getElementById('activeTasks').textContent = data.activeTasks;
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки системной информации:', error);
+        });
+}
+
+function refreshLogs() {
+    fetch('/api/admin/logs')
+        .then(response => response.json())
+        .then(data => {
+            const logsDiv = document.getElementById('systemLogs');
+            logsDiv.innerHTML = data.logs.map(log => 
+                `<div>[${log.timestamp}] ${log.level}: ${log.message}</div>`
+            ).join('');
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки логов:', error);
+        });
+}
+
+document.getElementById('authConfigForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    
+    if (data.password !== data.confirmPassword) {
+        alert('Пароли не совпадают');
+        return;
+    }
+    
+    fetch('/api/admin/config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        alert('Настройки сохранены');
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error.message);
+    });
+});
+
+// Загружаем данные при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    refreshSystemInfo();
+    refreshLogs();
+    
+    // Обновляем каждые 30 секунд
+    setInterval(refreshSystemInfo, 30000);
+    setInterval(refreshLogs, 30000);
+});
+</script> 

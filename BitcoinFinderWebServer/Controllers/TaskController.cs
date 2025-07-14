@@ -24,7 +24,8 @@ namespace BitcoinFinderWebServer.Controllers
         {
             try
             {
-                _logger.LogInformation($"Создание задачи: {request.Name}");
+                _logger.LogInformation($"Creating task: {request.Name}");
+                _logger.LogInformation($"Request parameters: TargetAddress='{request.TargetAddress}', WordCount={request.WordCount}, BatchSize={request.BatchSize}, BlockSize={request.BlockSize}, Threads={request.Threads}");
 
                 var parameters = new SearchParameters
                 {
@@ -35,8 +36,11 @@ namespace BitcoinFinderWebServer.Controllers
                     StartIndex = request.StartIndex,
                     EndIndex = request.EndIndex,
                     BatchSize = request.BatchSize,
-                    BlockSize = request.BlockSize
+                    BlockSize = request.BlockSize,
+                    Threads = request.Threads
                 };
+
+                _logger.LogInformation($"SearchParameters created: TargetAddress='{parameters.TargetAddress}', WordCount={parameters.WordCount}, BatchSize={parameters.BatchSize}, BlockSize={parameters.BlockSize}, Threads={parameters.Threads}");
 
                 var task = await _taskManager.CreateTaskAsync(request.Name, parameters);
 
@@ -46,13 +50,15 @@ namespace BitcoinFinderWebServer.Controllers
                     TaskId = task.Id,
                     TotalCombinations = task.TotalCombinations,
                     BlockCount = task.Blocks.Count,
-                    Message = "Задача успешно создана"
+                    Message = "Task created successfully"
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при создании задачи");
-                return BadRequest(new { Success = false, Message = ex.Message });
+                _logger.LogError(ex, $"Task creation failed: {ex.Message}");
+                _logger.LogError($"Exception type: {ex.GetType().Name}");
+                _logger.LogError($"Stack trace: {ex.StackTrace}");
+                return BadRequest(new { Success = false, Message = $"Task creation failed: {ex.Message} (Type: {ex.GetType().Name})" });
             }
         }
 
@@ -202,6 +208,21 @@ namespace BitcoinFinderWebServer.Controllers
                 return BadRequest(new { Success = false, Message = ex.Message });
             }
         }
+
+        [HttpGet("progress/current")]
+        public IActionResult GetCurrentProgress()
+        {
+            var finder = HttpContext.RequestServices.GetService(typeof(BitcoinFinderWebServer.Services.SeedPhraseFinder)) as BitcoinFinderWebServer.Services.SeedPhraseFinder;
+            if (finder == null)
+                return NotFound();
+            var lastPhrases = finder.GetLastSeedPhrases();
+            var (idx, phrase) = finder.LoadProgress();
+            return Ok(new {
+                LastPhrases = lastPhrases,
+                LastSavedIndex = idx,
+                LastSavedPhrase = phrase
+            });
+        }
     }
 
     public class CreateTaskRequest
@@ -215,5 +236,6 @@ namespace BitcoinFinderWebServer.Controllers
         public long EndIndex { get; set; } = 0;
         public int BatchSize { get; set; } = 1000;
         public long BlockSize { get; set; } = 100000;
+        public int Threads { get; set; } = 1; // Added Threads property
     }
 } 

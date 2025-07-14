@@ -1,0 +1,54 @@
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Главная";
+}
+
+<div class="row">
+    <div class="col-md-12">
+        <h2>Добро пожаловать, @ViewBag.Username!</h2>
+        <p>Панель управления BitcoinFinder</p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Задачи</h5>
+                <p class="card-text">Активных задач: @ViewBag.TaskCount</p>
+                <a href="/Home/SeedSearch" class="btn btn-primary">Управление задачами</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Агенты</h5>
+                <p class="card-text">Подключенных агентов: @ViewBag.AgentCount</p>
+                <a href="/api/agents" class="btn btn-info">Просмотр агентов</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Администрирование</h5>
+                <p class="card-text">Настройки системы</p>
+                <a href="/Home/Admin" class="btn btn-warning">Админ панель</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Быстрые действия</h5>
+                <a href="/Home/SeedSearch" class="btn btn-success me-2">Создать задачу поиска</a>
+                <a href="/api/tasks" class="btn btn-secondary me-2">Просмотр всех задач</a>
+                <a href="/Account/Logout" class="btn btn-danger">Выйти</a>
+            </div>
+        </div>
+    </div>
+</div> 

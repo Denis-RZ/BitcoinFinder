@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
 using System.Text.Json;
+using System;
+using System.Numerics;
 
 namespace BitcoinFinderWebServer.Services
 {
@@ -14,6 +16,12 @@ namespace BitcoinFinderWebServer.Services
     {
         private readonly ILogger<SeedPhraseFinder> _logger;
         private readonly string[] _englishWords;
+        private readonly ConcurrentQueue<string> _lastSeedPhrases = new ConcurrentQueue<string>();
+        private readonly object _progressLock = new object();
+        private DateTime _lastProgressSave = DateTime.MinValue;
+        private const string ProgressFile = "progress_last.json";
+        private long _lastSavedIndex = 0;
+        private string _lastSavedPhrase = "";
 
         public SeedPhraseFinder(ILogger<SeedPhraseFinder> logger)
         {
@@ -25,12 +33,19 @@ namespace BitcoinFinderWebServer.Services
         {
             return await Task.Run(() =>
             {
+                if (_englishWords.Length == 0)
+                {
+                    _logger.LogError("BIP39 словарь пуст! Невозможно вычислить комбинации.");
+                    return 0L;
+                }
                 var knownWords = parameters.KnownWords.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 var unknownPositions = parameters.WordCount - knownWords.Length;
                 
                 if (unknownPositions <= 0) return 1;
                 
-                return (long)Math.Pow(_englishWords.Length, unknownPositions);
+                var total = (long)Math.Pow(_englishWords.Length, unknownPositions);
+                _logger.LogInformation($"Вычисление комбинаций: словарь={_englishWords.Length}, неизвестных позиций={unknownPositions}, всего={total}");
+                return total;
             });
         }
 
@@ -80,7 +95,7 @@ namespace BitcoinFinderWebServer.Services
             });
         }
 
-        public async Task<SearchResult> SearchSeedPhraseAsync(SearchParameters parameters)
+        public async Task<SearchResult> SearchSeedPhraseAsync(SearchParameters parameters, IDatabaseService? dbService = null)
         {
             return await Task.Run(() =>
             {
@@ -90,81 +105,64 @@ namespace BitcoinFinderWebServer.Services
                     ProcessedCombinations = 0,
                     ProcessingTime = TimeSpan.Zero
                 };
-
                 try
                 {
                     var startTime = DateTime.UtcNow;
-                    var knownWords = parameters.KnownWords.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    var unknownPositions = parameters.WordCount - knownWords.Length;
-
-                    if (unknownPositions <= 0)
+                    var wordCount = parameters.WordCount;
+                    var batchSize = parameters.BatchSize > 0 ? parameters.BatchSize : 1000000;
+                    var threads = parameters.Threads > 0 ? parameters.Threads : 1;
+                    var maxCombinations = (long)Math.Pow(_englishWords.Length, wordCount);
+                    var found = false;
+                    var foundSeed = "";
+                    var foundAddress = "";
+                    var processed = 0L;
+                    var locker = new object();
+                    Parallel.For(0, threads, new ParallelOptions { MaxDegreeOfParallelism = threads }, t =>
                     {
-                        // Все слова известны, проверяем одну комбинацию
-                        var seedPhrase = string.Join(" ", knownWords);
-                        var address = GenerateBitcoinAddressAsync(seedPhrase).Result;
-                        
-                        result.ProcessedCombinations = 1;
-                        result.ProcessingTime = DateTime.UtcNow - startTime;
-                        
-                        if (address.Equals(parameters.TargetAddress, StringComparison.OrdinalIgnoreCase))
+                        for (long i = t; i < batchSize && !found; i += threads)
                         {
-                            result.Success = true;
-                            result.FoundSeedPhrase = seedPhrase;
-                            result.FoundAddress = address;
-                        }
-                        
-                        return result;
-                    }
-
-                    // Генерируем комбинации для неизвестных позиций
-                    var combinations = GenerateCombinations(unknownPositions, parameters.StartIndex, parameters.EndIndex);
-                    
-                    foreach (var combination in combinations)
-                    {
-                        result.ProcessedCombinations++;
-                        
-                        // Создаем seed-фразу, подставляя известные слова
-                        var seedWords = new string[parameters.WordCount];
-                        var knownIndex = 0;
-                        var unknownIndex = 0;
-                        
-                        for (int i = 0; i < parameters.WordCount; i++)
-                        {
-                            // Здесь нужно логику для определения позиций известных слов
-                            // Пока просто чередуем известные и неизвестные
-                            if (knownIndex < knownWords.Length && i % 2 == 0)
+                            var temp = i;
+                            var words = new string[wordCount];
+                            for (int j = 0; j < wordCount; j++)
                             {
-                                seedWords[i] = knownWords[knownIndex++];
+                                words[j] = _englishWords[temp % _englishWords.Length];
+                                temp /= _englishWords.Length;
                             }
-                            else
+                            var seedPhrase = string.Join(" ", words);
+                            // Добавляем фразу в очередь последних
+                            lock (_progressLock) {
+                                _lastSeedPhrases.Enqueue(seedPhrase);
+                                while (_lastSeedPhrases.Count > 10) _lastSeedPhrases.TryDequeue(out _);
+                            }
+                            var address = GenerateBitcoinAddressAsync(seedPhrase).Result;
+                            lock (locker) { processed++; }
+                            if (address.Equals(parameters.TargetAddress, StringComparison.OrdinalIgnoreCase))
                             {
-                                seedWords[i] = combination[unknownIndex++];
+                                lock (locker)
+                                {
+                                    found = true;
+                                    foundSeed = seedPhrase;
+                                    foundAddress = address;
+                                }
+                                break;
                             }
                         }
-                        
-                        var seedPhrase = string.Join(" ", seedWords);
-                        var address = GenerateBitcoinAddressAsync(seedPhrase).Result;
-                        
-                        if (address.Equals(parameters.TargetAddress, StringComparison.OrdinalIgnoreCase))
-                        {
-                            result.Success = true;
-                            result.FoundSeedPhrase = seedPhrase;
-                            result.FoundAddress = address;
-                            break;
-                        }
-                        
-                        // Ограничиваем количество комбинаций для демонстрации
-                        if (result.ProcessedCombinations >= parameters.BatchSize)
-                            break;
-                    }
-                    
+                    });
+                    result.ProcessedCombinations = processed;
                     result.ProcessingTime = DateTime.UtcNow - startTime;
+                    if (found)
+                    {
+                        result.Success = true;
+                        result.FoundSeedPhrase = foundSeed;
+                        result.FoundAddress = foundAddress;
+                        // Сохраняем результат в БД
+                        dbService?.SaveFoundSeed(parameters.TargetAddress, foundSeed, foundAddress, result.ProcessedCombinations, result.ProcessingTime);
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Ошибка при поиске seed-фразы");
                 }
-                
                 return result;
             });
         }
@@ -189,6 +187,73 @@ namespace BitcoinFinderWebServer.Services
                 }
                 
                 yield return combination;
+            }
+        }
+
+        public List<string> GetLastSeedPhrases() {
+            lock (_progressLock) {
+                return _lastSeedPhrases.ToList();
+            }
+        }
+        private void SaveProgress(long index, string phrase) {
+            try {
+                var obj = new {
+                    Timestamp = DateTime.UtcNow,
+                    CurrentIndex = index,
+                    LastCheckedPhrase = phrase,
+                    WordCount = 12
+                };
+                File.WriteAllText(ProgressFile, System.Text.Json.JsonSerializer.Serialize(obj, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                _lastSavedIndex = index;
+                _lastSavedPhrase = phrase;
+            } catch {}
+        }
+        public (long, string) LoadProgress() {
+            try {
+                if (File.Exists(ProgressFile)) {
+                    var json = File.ReadAllText(ProgressFile);
+                    var doc = System.Text.Json.JsonDocument.Parse(json);
+                    var idx = doc.RootElement.GetProperty("CurrentIndex").GetInt64();
+                    var phrase = doc.RootElement.GetProperty("LastCheckedPhrase").GetString() ?? "";
+                    return (idx, phrase);
+                }
+            } catch {}
+            return (0, "");
+        }
+
+        // Возвращает список диапазонов (start, end), каждый <= long.MaxValue
+        public List<(long start, long end)> GetSafeRanges(int wordCount, long blockSize)
+        {
+            var ranges = new List<(long, long)>();
+            var total = BigInteger.Pow(_englishWords.Length, wordCount);
+            BigInteger start = 0;
+            while (start < total)
+            {
+                BigInteger end = BigInteger.Min(start + blockSize - 1, total - 1);
+                ranges.Add(((long)start, (long)end));
+                start = end + 1;
+            }
+            return ranges;
+        }
+        public async Task<BigInteger> CalculateTotalCombinationsBigAsync(SearchParameters parameters)
+        {
+            return await Task.Run(() =>
+            {
+                if (_englishWords.Length == 0) return BigInteger.Zero;
+                var knownWords = parameters.KnownWords.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var unknownPositions = parameters.WordCount - knownWords.Length;
+                if (unknownPositions <= 0) return BigInteger.One;
+                return BigInteger.Pow(_englishWords.Length, unknownPositions);
+            });
+        }
+        public string GetEnglishWordByIndex(int idx) {
+            if (idx < 0 || idx >= _englishWords.Length) return "";
+            return _englishWords[idx];
+        }
+        public void AddLastSeedPhrase(string phrase) {
+            lock (_progressLock) {
+                _lastSeedPhrases.Enqueue(phrase);
+                while (_lastSeedPhrases.Count > 10) _lastSeedPhrases.TryDequeue(out _);
             }
         }
     }

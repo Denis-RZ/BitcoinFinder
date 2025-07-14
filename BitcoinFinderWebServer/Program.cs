@@ -4,13 +4,13 @@ using BitcoinFinderWebServer.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
-builder.Services.AddControllers();
+builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Add Blazor Server services
-builder.Services.AddRazorPages();
-builder.Services.AddServerSideBlazor();
+// builder.Services.AddRazorPages();
+// builder.Services.AddServerSideBlazor();
 
 // Add authentication and authorization
 builder.Services.AddAuthentication("Cookies")
@@ -49,6 +49,11 @@ builder.Services.AddSession(options =>
 });
 builder.Services.AddSingleton<IAuthService, AuthService>();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("ServerAPI", client =>
+{
+    // Используем относительный URL для избежания проблем с CORS
+    client.BaseAddress = new Uri("/");
+});
 
 var app = builder.Build();
 
@@ -78,12 +83,13 @@ app.UseMiddleware<BitcoinFinderWebServer.Services.AuthMiddleware>();
 
 // Map endpoints
 app.MapControllers();
-app.MapBlazorHub();
-app.MapRazorPages();
-app.MapFallbackToPage("/_Host");
+app.MapDefaultControllerRoute();
+// app.MapBlazorHub();
+// app.MapRazorPages();
+// app.MapFallbackToPage("/_Host");
 
 // Configure URLs
 app.Urls.Clear();
-app.Urls.Add("http://localhost:5000");
+app.Urls.Add("http://localhost:5002");
 
 app.Run();

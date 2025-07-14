@@ -36,4 +36,13 @@ namespace BitcoinFinderWebServer.Models
         public string Password { get; set; } = "admin123";
         public bool RequireAuth { get; set; } = true;
     }
+
+    public class LoginViewModel
+    {
+        [Required]
+        public string Username { get; set; }
+        [Required]
+        [DataType(DataType.Password)]
+        public string Password { get; set; }
+    }
 } 
