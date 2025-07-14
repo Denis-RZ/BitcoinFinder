@@ -1,0 +1,213 @@
+@page "/"
+@using BitcoinFinderWebServer.Models
+@inject TaskManager TaskManager
+@inject AgentManager AgentManager
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+
+<PageTitle>Главная - BitcoinFinder</PageTitle>
+
+@if (!isAuthorized)
+{
+    <div class="d-flex justify-content-center align-items-center min-vh-100">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Загрузка...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container py-5">
+        <div class="row mb-4">
+            <div class="col-12 text-center">
+                <h1 class="display-4 fw-bold">BitcoinFinder</h1>
+                <p class="lead">Распределённая система для поиска seed-фраз по известным Bitcoin адресам</p>
+            </div>
+        </div>
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <div class="card text-center shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Активные задачи</h5>
+                        <h2 class="text-primary">@activeTasksCount</h2>
+                        <a href="seed-search" class="btn btn-primary btn-sm">Управление</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Подключенные агенты</h5>
+                        <h2 class="text-success">@connectedAgentsCount</h2>
+                        <a href="agents" class="btn btn-success btn-sm">Просмотр</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Скорость поиска</h5>
+                        <h2 class="text-info">@searchSpeed</h2>
+                        <small class="text-muted">комбинаций/сек</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Найдено решений</h5>
+                        <h2 class="text-warning">@foundResultsCount</h2>
+                        <a href="system" class="btn btn-warning btn-sm">Детали</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h5>Быстрые действия</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary btn-lg" @onclick="NavigateToSeedSearch">
+                                        Создать задачу поиска
+                                    </button>
+                                    <button class="btn btn-outline-primary" @onclick="NavigateToAgents">
+                                        Управление агентами
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-success btn-lg" @onclick="StartServerSearch">
+                                        Запустить серверный поиск
+                                    </button>
+                                    <button class="btn btn-outline-success" @onclick="NavigateToSystem">
+                                        Мониторинг системы
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h5>Последние события</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (recentEvents.Any())
+                        {
+                            <div class="list-group list-group-flush">
+                                @foreach (var evt in recentEvents)
+                                {
+                                    <div class="list-group-item">
+                                        <small class="text-muted">@evt.Timestamp.ToString("HH:mm:ss")</small>
+                                        <div>@evt.Message</div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted">Нет событий</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private int activeTasksCount = 0;
+    private int connectedAgentsCount = 0;
+    private string searchSpeed = "0";
+    private int foundResultsCount = 0;
+    private List<SystemEvent> recentEvents = new();
+    private bool isAuthorized = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Проверка авторизации
+        try
+        {
+            var response = await Http.GetAsync("api/auth/config");
+            isAuthorized = response.IsSuccessStatusCode;
+            if (!isAuthorized)
+            {
+                NavigationManager.NavigateTo("/login", true);
+                return;
+            }
+        }
+        catch
+        {
+            isAuthorized = false;
+            NavigationManager.NavigateTo("/login", true);
+            return;
+        }
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        try
+        {
+            var tasks = await TaskManager.GetAllTasksAsync();
+            activeTasksCount = tasks.Count(t => t.Status != "Completed");
+            var agents = await AgentManager.GetAllAgentsAsync();
+            connectedAgentsCount = agents.Count(a => a.Status == "Connected");
+            var stats = TaskManager.GetServerStats();
+            searchSpeed = stats.TotalProcessed > 0 ? (stats.TotalProcessed / Math.Max(1, stats.Uptime.TotalSeconds)).ToString("N0") : "0";
+            foundResultsCount = stats.FoundResults;
+            recentEvents = new List<SystemEvent>
+            {
+                new SystemEvent { Timestamp = DateTime.UtcNow.AddMinutes(-5), Message = "Запущен серверный поиск" },
+                new SystemEvent { Timestamp = DateTime.UtcNow.AddMinutes(-10), Message = "Подключен агент Agent-001" },
+                new SystemEvent { Timestamp = DateTime.UtcNow.AddMinutes(-15), Message = "Создана задача поиска" }
+            };
+        }
+        catch (Exception ex)
+        {
+            // Логирование ошибки
+        }
+    }
+
+    private async Task StartServerSearch()
+    {
+        try
+        {
+            await TaskManager.StartServerSearchAsync();
+            await LoadDashboardData();
+        }
+        catch (Exception ex)
+        {
+            // Обработка ошибки
+        }
+    }
+
+    private void NavigateToSeedSearch()
+    {
+        NavigationManager.NavigateTo("/seed-search");
+    }
+
+    private void NavigateToAgents()
+    {
+        NavigationManager.NavigateTo("/agents");
+    }
+
+    private void NavigateToSystem()
+    {
+        NavigationManager.NavigateTo("/system");
+    }
+
+    public class SystemEvent
+    {
+        public DateTime Timestamp { get; set; }
+        public string Message { get; set; } = "";
+    }
+} 

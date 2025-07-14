@@ -37,10 +37,32 @@ namespace BitcoinFinderWebServer.Services
             
             try
             {
-                _tcpListener = new TcpListener(IPAddress.Any, _port);
-                _tcpListener.Start();
+                var port = _port;
+                var maxPortAttempts = 10;
                 
-                _logger.LogInformation($"TCP-совместимый сервис запущен на порту {_port}");
+                for (int attempt = 0; attempt < maxPortAttempts; attempt++)
+                {
+                    try
+                    {
+                        _tcpListener = new TcpListener(IPAddress.Any, port);
+                        _tcpListener.Start();
+                        
+                        _logger.LogInformation($"TCP-совместимый сервис запущен на порту {port}");
+                        break;
+                    }
+                    catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+                    {
+                        _tcpListener?.Stop();
+                        port++;
+                        _logger.LogWarning($"Порт {port - 1} занят, пробуем порт {port}");
+                        
+                        if (attempt == maxPortAttempts - 1)
+                        {
+                            _logger.LogError("Не удалось найти свободный порт для TCP-сервиса");
+                            return;
+                        }
+                    }
+                }
                 
                 while (!_cancellationTokenSource.Token.IsCancellationRequested)
                 {

@@ -1,0 +1,98 @@
+@page "/login"
+@using BitcoinFinderWebServer.Models
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject ILogger<Login> Logger
+
+<PageTitle>Вход - BitcoinFinder</PageTitle>
+
+<div class="container d-flex align-items-center justify-content-center min-vh-100">
+    <div class="row w-100 justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-lg border-0">
+                <div class="card-header text-center bg-primary text-white">
+                    <h3 class="mb-0">BitcoinFinder</h3>
+                    <small class="text-white-50">Вход в систему</small>
+                </div>
+                <div class="card-body p-4">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            @errorMessage
+                        </div>
+                    }
+                    <EditForm Model="loginModel" OnValidSubmit="HandleLogin">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Имя пользователя</label>
+                            <InputText id="username" class="form-control" @bind-Value="loginModel.Username" autocomplete="username" />
+                            <ValidationMessage For="@(() => loginModel.Username)" />
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Пароль</label>
+                            <InputText type="password" id="password" class="form-control" @bind-Value="loginModel.Password" autocomplete="current-password" />
+                            <ValidationMessage For="@(() => loginModel.Password)" />
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg" disabled="@isLoggingIn">
+                                @if (isLoggingIn)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    <span>Вход...</span>
+                                }
+                                else
+                                {
+                                    <span>Войти</span>
+                                }
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginRequest loginModel = new();
+    private bool isLoggingIn = false;
+    private string errorMessage = "";
+
+    private async Task HandleLogin()
+    {
+        isLoggingIn = true;
+        errorMessage = "";
+        StateHasChanged();
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/auth/login", loginModel);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+                if (result?.Success == true)
+                {
+                    NavigationManager.NavigateTo("/", true);
+                }
+                else
+                {
+                    errorMessage = result?.Message ?? "Неверное имя пользователя или пароль";
+                }
+            }
+            else
+            {
+                var errorResult = await response.Content.ReadFromJsonAsync<LoginResponse>();
+                errorMessage = errorResult?.Message ?? "Неверное имя пользователя или пароль";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при входе");
+            errorMessage = "Произошла ошибка при входе в систему";
+        }
+        finally
+        {
+            isLoggingIn = false;
+            StateHasChanged();
+        }
+    }
+} 

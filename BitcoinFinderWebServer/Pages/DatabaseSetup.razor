@@ -1,0 +1,316 @@
+@page "/database-setup"
+@using BitcoinFinderWebServer.Models
+@using BitcoinFinderWebServer.Services
+@inject IDatabaseService DatabaseService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Настройка базы данных - BitcoinFinder</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h1>Настройка базы данных</h1>
+                    <p class="lead">Настройка подключения и установка базы данных для BitcoinFinder</p>
+                </div>
+                <div class="card-body">
+                    @if (showStatus)
+                    {
+                        <div class="alert alert-@statusType alert-dismissible fade show" role="alert">
+                            @statusMessage
+                            <button type="button" class="btn-close" @onclick="() => showStatus = false"></button>
+                        </div>
+                    }
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Настройки подключения</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Сервер базы данных</label>
+                                        <input type="text" class="form-control" @bind="config.Server" placeholder="localhost" />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Порт</label>
+                                        <input type="number" class="form-control" @bind="config.Port" placeholder="1433" />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Имя базы данных</label>
+                                        <input type="text" class="form-control" @bind="config.DatabaseName" placeholder="BitcoinFinder" />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Пользователь</label>
+                                        <input type="text" class="form-control" @bind="config.Username" placeholder="sa" />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Пароль</label>
+                                        <input type="password" class="form-control" @bind="config.Password" />
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" @bind="config.UseWindowsAuthentication" />
+                                            <label class="form-check-label">Использовать Windows аутентификацию</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Действия</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-primary" @onclick="TestConnection" disabled="@isLoading">
+                                            @if (isLoading) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                                            Тестировать подключение
+                                        </button>
+                                        <button class="btn btn-success" @onclick="CreateDatabase" disabled="@isLoading">
+                                            @if (isLoading) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                                            Создать базу данных
+                                        </button>
+                                        <button class="btn btn-info" @onclick="InstallSchema" disabled="@isLoading">
+                                            @if (isLoading) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                                            Установить схему
+                                        </button>
+                                        <button class="btn btn-warning" @onclick="InstallSeedData" disabled="@isLoading">
+                                            @if (isLoading) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                                            Установить начальные данные
+                                        </button>
+                                        <button class="btn btn-danger" @onclick="InstallFullDatabase" disabled="@isLoading">
+                                            @if (isLoading) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                                            Полная установка
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (schemaInfo != null)
+                    {
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5>Информация о схеме</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <h6>Таблицы:</h6>
+                                                <ul class="list-group">
+                                                    @foreach (var table in schemaInfo.Tables)
+                                                    {
+                                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                            @table.Name
+                                                            <span class="badge bg-primary rounded-pill">@table.Description</span>
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <h6>Версия: @schemaInfo.Version</h6>
+                                                <p>Последнее обновление: @schemaInfo.LastUpdated.ToString("dd.MM.yyyy HH:mm:ss")</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DatabaseConfig config = new();
+    private bool isLoading = false;
+    private bool showStatus = false;
+    private string statusMessage = "";
+    private string statusType = "info";
+    private SchemaInfo? schemaInfo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSchemaInfo();
+    }
+
+    private async Task LoadSchemaInfo()
+    {
+        try
+        {
+            // Здесь должен быть вызов API для получения информации о схеме
+            schemaInfo = new SchemaInfo
+            {
+                Tables = new[]
+                {
+                    new TableInfo { Name = "Agents", Description = "Таблица агентов" },
+                    new TableInfo { Name = "Tasks", Description = "Таблица задач" },
+                    new TableInfo { Name = "TaskResults", Description = "Таблица результатов задач" },
+                    new TableInfo { Name = "SystemSettings", Description = "Таблица системных настроек" }
+                },
+                Version = "1.0.0",
+                LastUpdated = DateTime.UtcNow
+            };
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Ошибка загрузки информации о схеме: " + ex.Message, "danger");
+        }
+    }
+
+    private async Task TestConnection()
+    {
+        isLoading = true;
+        try
+        {
+            var isConnected = await DatabaseService.TestConnectionAsync(config);
+            if (isConnected)
+            {
+                ShowStatus("Подключение к базе данных успешно", "success");
+            }
+            else
+            {
+                ShowStatus("Не удалось подключиться к базе данных", "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Ошибка тестирования подключения: " + ex.Message, "danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CreateDatabase()
+    {
+        isLoading = true;
+        try
+        {
+            var result = await DatabaseService.CreateDatabaseAsync(config);
+            if (result.Success)
+            {
+                ShowStatus("База данных успешно создана", "success");
+            }
+            else
+            {
+                ShowStatus("Ошибка создания базы данных: " + result.Message, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Ошибка создания базы данных: " + ex.Message, "danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task InstallSchema()
+    {
+        isLoading = true;
+        try
+        {
+            var result = await DatabaseService.InstallSchemaAsync(config);
+            if (result.Success)
+            {
+                ShowStatus("Схема базы данных успешно установлена", "success");
+            }
+            else
+            {
+                ShowStatus("Ошибка установки схемы: " + result.Message, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Ошибка установки схемы: " + ex.Message, "danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task InstallSeedData()
+    {
+        isLoading = true;
+        try
+        {
+            var result = await DatabaseService.InstallSeedDataAsync(config);
+            if (result.Success)
+            {
+                ShowStatus("Начальные данные успешно установлены", "success");
+            }
+            else
+            {
+                ShowStatus("Ошибка установки начальных данных: " + result.Message, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Ошибка установки начальных данных: " + ex.Message, "danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task InstallFullDatabase()
+    {
+        isLoading = true;
+        try
+        {
+            var request = new DatabaseInstallRequest { Config = config };
+            var result = await DatabaseService.InstallDatabaseAsync(request);
+            if (result.Success)
+            {
+                ShowStatus("Полная установка базы данных завершена успешно", "success");
+            }
+            else
+            {
+                ShowStatus("Ошибка полной установки: " + result.Message, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Ошибка полной установки: " + ex.Message, "danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ShowStatus(string message, string type)
+    {
+        statusMessage = message;
+        statusType = type;
+        showStatus = true;
+    }
+
+    public class SchemaInfo
+    {
+        public TableInfo[] Tables { get; set; } = Array.Empty<TableInfo>();
+        public string Version { get; set; } = "";
+        public DateTime LastUpdated { get; set; }
+    }
+
+    public class TableInfo
+    {
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+    }
+} 

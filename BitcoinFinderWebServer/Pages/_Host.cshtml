@@ -1,0 +1,37 @@
+@page
+@using Microsoft.AspNetCore.Components.Web
+@namespace BitcoinFinderWebServer.Pages
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BitcoinFinder</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/site.css" />
+    <component type="typeof(HeadOutlet)" render-mode="ServerPrerendered" />
+</head>
+<body>
+    <app>
+        @(await Html.RenderComponentAsync<App>(Microsoft.AspNetCore.Mvc.Rendering.RenderMode.ServerPrerendered))
+    </app>
+
+    <div id="blazor-error-ui">
+        <environment include="Staging,Production">
+            Произошла ошибка. Приложение может не отвечать до перезагрузки.
+        </environment>
+        <environment include="Development">
+            Произошла непредвиденная ошибка. Смотрите инструменты разработчика браузера для деталей.
+        </environment>
+        <a href="" class="reload">Перезагрузить</a>
+        <a class="dismiss">🗙</a>
+    </div>
+
+    <script src="_framework/blazor.server.js"></script>
+</body>
+</html> 

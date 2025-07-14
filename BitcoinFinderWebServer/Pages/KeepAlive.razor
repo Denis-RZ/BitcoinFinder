@@ -1,0 +1,431 @@
+@page "/keep-alive"
+@using BitcoinFinderWebServer.Services
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>Мониторинг системы - BitcoinFinder</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1>Мониторинг системы</h1>
+                        <p class="lead">Отслеживание состояния и производительности BitcoinFinder</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-primary" @onclick="RefreshData">
+                            @if (isLoading) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                            Обновить
+                        </button>
+                        <button class="btn btn-success" @onclick="ActivateServices">
+                            @if (isActivating) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                            Активировать сервисы
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    @if (showStatus)
+                    {
+                        <div class="alert alert-@statusType alert-dismissible fade show" role="alert">
+                            @statusMessage
+                            <button type="button" class="btn-close" @onclick="() => showStatus = false"></button>
+                        </div>
+                    }
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Статус сервера</h5>
+                                </div>
+                                <div class="card-body">
+                                    @if (serverStatus != null)
+                                    {
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p><strong>Статус:</strong> <span class="badge bg-success">@serverStatus.Status</span></p>
+                                                <p><strong>Время работы:</strong> @FormatUptime(serverStatus.Uptime)</p>
+                                                <p><strong>Процесс ID:</strong> @serverStatus.SystemInfo.ProcessId</p>
+                                                <p><strong>Машина:</strong> @serverStatus.SystemInfo.MachineName</p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p><strong>ОС:</strong> @serverStatus.SystemInfo.OSVersion</p>
+                                                <p><strong>Процессоры:</strong> @serverStatus.SystemInfo.ProcessorCount</p>
+                                                <p><strong>Память:</strong> @FormatBytes(serverStatus.SystemInfo.WorkingSet)</p>
+                                                <p><strong>64-bit:</strong> @(serverStatus.SystemInfo.Is64BitProcess ? "Да" : "Нет")</p>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">Данные не загружены</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Статистика</h5>
+                                </div>
+                                <div class="card-body">
+                                    @if (serverStatus != null)
+                                    {
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="text-center">
+                                                    <h3 class="text-primary">@serverStatus.Statistics.ActiveAgents</h3>
+                                                    <p>Активные агенты</p>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="text-center">
+                                                    <h3 class="text-success">@serverStatus.Statistics.PendingTasks</h3>
+                                                    <p>Ожидающие задачи</p>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="text-center">
+                                                    <h3 class="text-info">@serverStatus.Statistics.CompletedTasks</h3>
+                                                    <p>Завершенные задачи</p>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="text-center">
+                                                    <h3 class="text-warning">@serverStatus.Statistics.TotalProcessedBlocks</h3>
+                                                    <p>Обработано блоков</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">Данные не загружены</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Состояние сервисов</h5>
+                                </div>
+                                <div class="card-body">
+                                    @if (serverStatus != null)
+                                    {
+                                        <div class="list-group">
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                AgentManager
+                                                <span class="badge bg-@(serverStatus.Services.AgentManager == "Running" ? "success" : "danger") rounded-pill">
+                                                    @serverStatus.Services.AgentManager
+                                                </span>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                TaskManager
+                                                <span class="badge bg-@(serverStatus.Services.TaskManager == "Running" ? "success" : "danger") rounded-pill">
+                                                    @serverStatus.Services.TaskManager
+                                                </span>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                PoolManager
+                                                <span class="badge bg-@(serverStatus.Services.PoolManager == "Running" ? "success" : "danger") rounded-pill">
+                                                    @serverStatus.Services.PoolManager
+                                                </span>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">Данные не загружены</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Проверка здоровья</h5>
+                                </div>
+                                <div class="card-body">
+                                    @if (healthStatus != null)
+                                    {
+                                        <div class="list-group">
+                                            @foreach (var check in healthStatus.Checks)
+                                            {
+                                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <strong>@check.Component</strong>
+                                                        <br><small class="text-muted">@check.Message</small>
+                                                    </div>
+                                                    <span class="badge bg-@(check.Status == "Healthy" ? "success" : "danger") rounded-pill">
+                                                        @check.Status
+                                                    </span>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">Данные не загружены</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (metrics != null)
+                    {
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5>Метрики производительности</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <div class="text-center">
+                                                    <h4 class="text-primary">@metrics.Performance.CpuUsage.ToString("F1")%</h4>
+                                                    <p>Использование CPU</p>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="text-center">
+                                                    <h4 class="text-info">@metrics.Performance.MemoryUsage.ToString("F1") MB</h4>
+                                                    <p>Использование памяти</p>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="text-center">
+                                                    <h4 class="text-success">@metrics.Performance.TasksPerSecond.ToString("F1")</h4>
+                                                    <p>Задач/сек</p>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="text-center">
+                                                    <h4 class="text-warning">@metrics.Performance.BlocksPerSecond.ToString("F1")</h4>
+                                                    <p>Блоков/сек</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isLoading = false;
+    private bool isActivating = false;
+    private bool showStatus = false;
+    private string statusMessage = "";
+    private string statusType = "info";
+    private ServerStatus? serverStatus;
+    private HealthStatus? healthStatus;
+    private MetricsData? metrics;
+    private Timer? updateTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshData();
+        StartUpdateTimer();
+    }
+
+    private async Task RefreshData()
+    {
+        isLoading = true;
+        try
+        {
+            await Task.WhenAll(
+                LoadServerStatus(),
+                LoadHealthStatus(),
+                LoadMetrics()
+            );
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Ошибка загрузки данных: " + ex.Message, "danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadServerStatus()
+    {
+        try
+        {
+            serverStatus = await Http.GetFromJsonAsync<ServerStatus>("api/keepalive/status");
+        }
+        catch (Exception ex)
+        {
+            // Логирование ошибки
+        }
+    }
+
+    private async Task LoadHealthStatus()
+    {
+        try
+        {
+            healthStatus = await Http.GetFromJsonAsync<HealthStatus>("api/keepalive/health");
+        }
+        catch (Exception ex)
+        {
+            // Логирование ошибки
+        }
+    }
+
+    private async Task LoadMetrics()
+    {
+        try
+        {
+            metrics = await Http.GetFromJsonAsync<MetricsData>("api/keepalive/metrics");
+        }
+        catch (Exception ex)
+        {
+            // Логирование ошибки
+        }
+    }
+
+    private async Task ActivateServices()
+    {
+        isActivating = true;
+        try
+        {
+            var response = await Http.PostAsync("api/keepalive/activate", null);
+            if (response.IsSuccessStatusCode)
+            {
+                ShowStatus("Сервисы успешно активированы", "success");
+                await RefreshData();
+            }
+            else
+            {
+                ShowStatus("Ошибка активации сервисов", "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Ошибка активации сервисов: " + ex.Message, "danger");
+        }
+        finally
+        {
+            isActivating = false;
+        }
+    }
+
+    private void StartUpdateTimer()
+    {
+        updateTimer = new Timer(async _ =>
+        {
+            await RefreshData();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private void ShowStatus(string message, string type)
+    {
+        statusMessage = message;
+        statusType = type;
+        showStatus = true;
+    }
+
+    private string FormatUptime(TimeSpan uptime)
+    {
+        return $"{uptime.Days}д {uptime.Hours}ч {uptime.Minutes}м {uptime.Seconds}с";
+    }
+
+    private string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:0.##} {sizes[order]}";
+    }
+
+    public void Dispose()
+    {
+        updateTimer?.Dispose();
+    }
+
+    public class ServerStatus
+    {
+        public string Status { get; set; } = "";
+        public DateTime Timestamp { get; set; }
+        public TimeSpan Uptime { get; set; }
+        public SystemInfo SystemInfo { get; set; } = new();
+        public ServicesInfo Services { get; set; } = new();
+        public StatisticsInfo Statistics { get; set; } = new();
+    }
+
+    public class SystemInfo
+    {
+        public int ProcessId { get; set; }
+        public string MachineName { get; set; } = "";
+        public string OSVersion { get; set; } = "";
+        public int ProcessorCount { get; set; }
+        public long WorkingSet { get; set; }
+        public bool Is64BitProcess { get; set; }
+    }
+
+    public class ServicesInfo
+    {
+        public string AgentManager { get; set; } = "";
+        public string TaskManager { get; set; } = "";
+        public string PoolManager { get; set; } = "";
+    }
+
+    public class StatisticsInfo
+    {
+        public int ActiveAgents { get; set; }
+        public int PendingTasks { get; set; }
+        public int CompletedTasks { get; set; }
+        public long TotalProcessedBlocks { get; set; }
+    }
+
+    public class HealthStatus
+    {
+        public string Status { get; set; } = "";
+        public DateTime Timestamp { get; set; }
+        public HealthCheck[] Checks { get; set; } = Array.Empty<HealthCheck>();
+    }
+
+    public class HealthCheck
+    {
+        public string Component { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string Message { get; set; } = "";
+    }
+
+    public class MetricsData
+    {
+        public DateTime Timestamp { get; set; }
+        public PerformanceInfo Performance { get; set; } = new();
+    }
+
+    public class PerformanceInfo
+    {
+        public double CpuUsage { get; set; }
+        public double MemoryUsage { get; set; }
+        public int ActiveConnections { get; set; }
+        public double TasksPerSecond { get; set; }
+        public double BlocksPerSecond { get; set; }
+    }
+} 

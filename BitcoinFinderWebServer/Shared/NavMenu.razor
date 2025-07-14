@@ -1,0 +1,99 @@
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+@if (isAuthorized)
+{
+    <div class="top-row ps-3 navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="">BitcoinFinder</a>
+            <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+        </div>
+    </div>
+    <div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
+        <nav class="flex-column">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <span class="oi oi-home" aria-hidden="true"></span> Главная
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="seed-search">
+                    <span class="oi oi-search" aria-hidden="true"></span> Поиск Seed-фраз
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="agents">
+                    <span class="oi oi-people" aria-hidden="true"></span> Агенты
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="tasks">
+                    <span class="oi oi-list" aria-hidden="true"></span> Задачи
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="system">
+                    <span class="oi oi-monitor" aria-hidden="true"></span> Система
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="keep-alive">
+                    <span class="oi oi-pulse" aria-hidden="true"></span> Мониторинг
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="database-setup">
+                    <span class="oi oi-database" aria-hidden="true"></span> База данных
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <button class="nav-link btn btn-link" @onclick="Logout">
+                    <span class="oi oi-account-logout" aria-hidden="true"></span> Выход
+                </button>
+            </div>
+        </nav>
+    </div>
+}
+
+@code {
+    private bool collapseNavMenu = true;
+    private bool isAuthorized = false;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var response = await Http.GetAsync("api/auth/config");
+            isAuthorized = response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            isAuthorized = false;
+        }
+    }
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+
+    private async Task Logout()
+    {
+        try
+        {
+            var response = await Http.PostAsync("api/auth/logout", null);
+            if (response.IsSuccessStatusCode)
+            {
+                NavigationManager.NavigateTo("/login", true);
+            }
+        }
+        catch
+        {
+            NavigationManager.NavigateTo("/login", true);
+        }
+    }
+} 

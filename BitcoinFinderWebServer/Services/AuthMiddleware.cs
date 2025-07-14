@@ -40,7 +40,7 @@ namespace BitcoinFinderWebServer.Services
             var token = context.Session.GetString("AuthToken");
             if (string.IsNullOrEmpty(token))
             {
-                context.Response.Redirect("/login.html");
+                context.Response.Redirect("/login");
                 return;
             }
             await _next(context);
