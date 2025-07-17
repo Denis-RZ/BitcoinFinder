@@ -7,20 +7,26 @@ namespace BitcoinFinderWebServer.Models
         public string Status { get; set; } = "Pending";
         public DateTime CreatedAt { get; set; }
         public DateTime? StartedAt { get; set; }
+        public DateTime? StoppedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
         public string? AssignedTo { get; set; }
-        public SearchParameters Parameters { get; set; } = new();
+        public SearchParameters SearchParameters { get; set; } = new();
         public long TotalCombinations { get; set; } = 0;
         public long ProcessedCombinations { get; set; } = 0;
         public double Progress => TotalCombinations > 0 ? (double)ProcessedCombinations / TotalCombinations : 0;
         public string? Result { get; set; }
         public string? FoundSeedPhrase { get; set; }
         public string? FoundAddress { get; set; }
+        public string? ErrorMessage { get; set; }
         
         // Добавляем поддержку блоков для совместимости с WinForms
         public List<SearchBlock> Blocks { get; set; } = new();
         public bool EnableServerSearch { get; set; } = true;
         public int ServerThreads { get; set; } = 2;
+        
+        // Свойства для совместимости с TaskManager
+        public string TargetAddress => SearchParameters.TargetAddress;
+        public int WordCount => SearchParameters.WordCount;
     }
 
     public class SearchParameters
@@ -44,21 +50,26 @@ namespace BitcoinFinderWebServer.Models
         public long EndIndex { get; set; }
         public int WordCount { get; set; }
         public string TargetAddress { get; set; } = "";
-        public BlockStatus Status { get; set; }
+        public string Status { get; set; } = "Pending";
         public string? AssignedTo { get; set; }
         public DateTime? AssignedAt { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
         public long CurrentIndex { get; set; }
         public DateTime? LastProgressAt { get; set; }
         public int Priority { get; set; }
+        public string? ErrorMessage { get; set; }
     }
 
     public enum BlockStatus
     {
         Pending,
         Assigned,
+        Processing,
         Completed,
+        Cancelled,
+        Error,
         Failed
     }
 
@@ -83,6 +94,8 @@ namespace BitcoinFinderWebServer.Models
         public long TotalCombinations { get; set; }
         public int FoundResults { get; set; }
         public TimeSpan Uptime { get; set; }
+        public bool IsRunning { get; set; }
+        public double TasksPerSecond { get; set; }
         public List<AgentStats> AgentStats { get; set; } = new();
     }
 

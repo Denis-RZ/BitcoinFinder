@@ -1,0 +1,461 @@
+/* Стили для страницы управления задачами */
+
+/* Основные стили */
+body {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+}
+
+.container-fluid {
+    padding: 20px;
+}
+
+/* Заголовки */
+h2 {
+    color: #2c3e50;
+    font-weight: 600;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+h2 i {
+    margin-right: 10px;
+    color: #3498db;
+}
+
+/* Карточки статистики */
+.stat-card {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+}
+
+.stat-value {
+    font-size: 2.5em;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    color: #7f8c8d;
+    font-size: 0.9em;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Карточки */
+.card {
+    border: none;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    border-radius: 15px;
+    transition: all 0.3s ease;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(10px);
+}
+
+.card:hover {
+    box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+    transform: translateY(-2px);
+}
+
+.card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px 15px 0 0 !important;
+    border: none;
+    padding: 15px 20px;
+}
+
+.card-header h5 {
+    margin: 0;
+    font-weight: 600;
+    font-size: 1.1em;
+}
+
+.card-header h5 i {
+    margin-right: 8px;
+}
+
+.card-body {
+    padding: 25px;
+}
+
+/* Кнопки */
+.btn {
+    border-radius: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+    border: none;
+    padding: 12px 20px;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+
+.btn-lg {
+    padding: 15px 25px;
+    font-size: 1.1em;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+}
+
+.btn-warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.btn-outline-primary {
+    border: 2px solid #667eea;
+    color: #667eea;
+    background: transparent;
+}
+
+.btn-outline-primary:hover {
+    background: #667eea;
+    color: white;
+}
+
+.btn-outline-secondary {
+    border: 2px solid #95a5a6;
+    color: #95a5a6;
+    background: transparent;
+}
+
+.btn-outline-secondary:hover {
+    background: #95a5a6;
+    color: white;
+}
+
+.btn-outline-danger {
+    border: 2px solid #e74c3c;
+    color: #e74c3c;
+    background: transparent;
+}
+
+.btn-outline-danger:hover {
+    background: #e74c3c;
+    color: white;
+}
+
+/* Таблицы */
+.table {
+    background: white;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.table thead th {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.9em;
+    padding: 15px;
+}
+
+.table tbody td {
+    padding: 15px;
+    border-bottom: 1px solid #ecf0f1;
+    vertical-align: middle;
+}
+
+.table-hover tbody tr:hover {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    transform: scale(1.01);
+    transition: all 0.2s ease;
+}
+
+/* Прогресс-бары */
+.progress {
+    background: #ecf0f1;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.progress-bar {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    transition: width 0.6s ease;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+/* Бейджи */
+.badge {
+    border-radius: 20px;
+    padding: 8px 15px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.8em;
+}
+
+.bg-success {
+    background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%) !important;
+}
+
+.bg-warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
+}
+
+.bg-info {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
+}
+
+.bg-secondary {
+    background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%) !important;
+}
+
+.bg-danger {
+    background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%) !important;
+}
+
+.bg-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+}
+
+/* Живой лог фраз */
+.phrase-log {
+    background: #2c3e50;
+    color: #ecf0f1;
+    border: none;
+    border-radius: 10px;
+    padding: 15px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    max-height: 300px;
+    overflow-y: auto;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
+}
+
+.phrase-log::-webkit-scrollbar {
+    width: 8px;
+}
+
+.phrase-log::-webkit-scrollbar-track {
+    background: #34495e;
+    border-radius: 4px;
+}
+
+.phrase-log::-webkit-scrollbar-thumb {
+    background: #667eea;
+    border-radius: 4px;
+}
+
+.phrase-log::-webkit-scrollbar-thumb:hover {
+    background: #764ba2;
+}
+
+/* Результат поиска */
+.found-result {
+    background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 20px;
+    margin: 15px 0;
+    animation: pulse 2s infinite;
+    box-shadow: 0 8px 25px rgba(86, 171, 47, 0.3);
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+    100% { transform: scale(1); }
+}
+
+.found-result h6 {
+    color: white;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 15px;
+}
+
+.found-result code {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.9em;
+    display: inline-block;
+    margin: 5px 0;
+}
+
+/* Код */
+code {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    color: #e83e8c;
+    border: 1px solid #dee2e6;
+}
+
+/* Алерты */
+.alert {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    padding: 15px 20px;
+    margin-bottom: 20px;
+    font-weight: 500;
+}
+
+.alert-success {
+    background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+    color: white;
+}
+
+.alert-danger {
+    background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+    color: white;
+}
+
+.alert-warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+}
+
+.alert-info {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+}
+
+/* Спиннер */
+.spinner-border {
+    color: #667eea;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .container-fluid {
+        padding: 10px;
+    }
+    
+    .stat-card {
+        margin-bottom: 15px;
+        padding: 15px;
+    }
+    
+    .stat-value {
+        font-size: 2em;
+    }
+    
+    .card-body {
+        padding: 15px;
+    }
+    
+    .btn-lg {
+        padding: 12px 20px;
+        font-size: 1em;
+    }
+    
+    .table thead th {
+        font-size: 0.8em;
+        padding: 10px;
+    }
+    
+    .table tbody td {
+        padding: 10px;
+        font-size: 0.9em;
+    }
+}
+
+/* Анимации загрузки */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Стили для иконок */
+.fas, .fa {
+    margin-right: 5px;
+}
+
+/* Дополнительные стили для таблиц */
+.table-responsive {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Стили для input групп */
+.input-group {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.input-group .form-control {
+    border: none;
+    padding: 12px 15px;
+    font-size: 1em;
+}
+
+.input-group .btn {
+    border-radius: 0;
+    margin: 0;
+}
+
+/* Стили для текста */
+.text-muted {
+    color: #7f8c8d !important;
+}
+
+.text-success {
+    color: #27ae60 !important;
+}
+
+.text-info {
+    color: #3498db !important;
+}
+
+.text-warning {
+    color: #f39c12 !important;
+}
+
+.text-danger {
+    color: #e74c3c !important;
+}
+
+.text-primary {
+    color: #667eea !important;
+}
+
+/* Стили для моноширинного шрифта */
+.font-monospace {
+    font-family: 'Courier New', monospace;
+    background: rgba(0,0,0,0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+} 

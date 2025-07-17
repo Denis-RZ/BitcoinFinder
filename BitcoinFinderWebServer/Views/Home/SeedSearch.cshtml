@@ -4,8 +4,15 @@
 }
 <div class="row">
     <div class="col-md-12">
-        <h2>Поиск Seed Phrase</h2>
-        <p>Создание новой задачи поиска по адресу</p>
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2>Поиск Seed Phrase</h2>
+                <p>Создание новой задачи поиска по адресу</p>
+            </div>
+            <a href="/Home/TaskManager" class="btn btn-outline-primary">
+                <i class="fas fa-tasks"></i> Управление задачами
+            </a>
+        </div>
     </div>
 </div>
 <div class="row mt-4">
@@ -73,13 +80,38 @@
         </div>
     </div>
 </div>
-<div class="card mt-4">
-  <div class="card-header"><b>Текущие перебираемые фразы</b></div>
-  <div class="card-body">
-    <div id="currentPhrasesBlock">
-      <div>Загрузка...</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <b>Обработанные фразы</b>
+                        <span class="badge bg-primary ms-2" id="phraseCount">0</span>
+                        <span class="badge bg-success ms-1" id="speedBadge">0 фраз/сек</span>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearLiveLog()">Очистить</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="liveLogContainer" style="height: 600px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; font-family: 'Courier New', monospace; font-size: 11px;">
+                    <p class="text-muted">Ожидание данных...</p>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header"><b>Текущие перебираемые фразы (старый формат)</b></div>
+    <div class="card-body">
+        <div id="currentPhrasesBlock">
+            <div>Загрузка...</div>
+        </div>
+    </div>
 </div>
 <script>
 let currentTaskId = null;
@@ -129,12 +161,35 @@ document.getElementById('searchForm').addEventListener('submit', function(e) {
             addLog('Ошибка парсинга JSON: ' + e.message);
             return;
         }
-        if (result.success) {
-            addLog(`Задача создана: ${result.taskId}`);
-            currentTaskId = result.taskId;
-            startPolling();
+        if (result.Success || result.success) {
+            const taskId = result.TaskId || result.taskId;
+            addLog(`Задача создана: ${taskId}`);
+            currentTaskId = taskId;
+            
+            // Автоматически запускаем задачу
+            fetch(`/api/task/task/${taskId}/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(async response => {
+                const startResult = await response.text();
+                try {
+                    const parsed = JSON.parse(startResult);
+                    if (parsed.Success || parsed.success) {
+                        addLog('Задача запущена в фоновом режиме');
+                        startPolling();
+                    } else {
+                        addLog('Ошибка запуска задачи: ' + (parsed.Message || parsed.message));
+                    }
+                } catch (e) {
+                    addLog('Ошибка парсинга ответа запуска: ' + e.message);
+                }
+            })
+            .catch(error => {
+                addLog('Ошибка запуска задачи: ' + error.message);
+            });
         } else {
-            addLog('Ошибка создания задачи: ' + (result.message || 'Unknown error'));
+            addLog('Ошибка создания задачи: ' + (result.Message || result.message || 'Unknown error'));
             addLog('Детали ошибки: ' + JSON.stringify(result, null, 2));
         }
     })
@@ -146,18 +201,35 @@ function startPolling() {
     if (pollingInterval) clearInterval(pollingInterval);
     pollingInterval = setInterval(() => {
         if (!currentTaskId) return;
-        fetch(`/api/tasks/${currentTaskId}`)
-            .then(r => r.json())
+        fetch(`/api/task/${currentTaskId}`)
+            .then(async response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const text = await response.text();
+                if (!text) {
+                    throw new Error('Empty response from server');
+                }
+                return JSON.parse(text);
+            })
             .then(task => {
-                document.getElementById('progressText').innerText = `Попыток: ${task.ProcessedCombinations}`;
-                addLog(`Проверено комбинаций: ${task.ProcessedCombinations}`);
-                if (task.Status === 'Completed') {
+                // Логируем ответ для отладки
+                console.log('Task API response:', task);
+                // Универсально ищем поле прогресса
+                const processed = task.ProcessedCombinations ?? task.processedCombinations ?? 0;
+                document.getElementById('progressText').innerText = `Попыток: ${processed}`;
+                addLog(`Проверено комбинаций: ${processed}`);
+                if (task.Status === 'Completed' || task.status === 'Completed') {
                     addLog('Поиск завершён.');
-                    if (task.FoundSeedPhrase) {
-                        addLog('Найдено! Seed: ' + task.FoundSeedPhrase + ', Address: ' + task.FoundAddress);
+                    if (task.FoundSeedPhrase || task.foundSeedPhrase) {
+                        addLog('Найдено! Seed: ' + (task.FoundSeedPhrase || task.foundSeedPhrase) + ', Address: ' + (task.FoundAddress || task.foundAddress));
                     }
                     clearInterval(pollingInterval);
                 }
+            })
+            .catch(error => {
+                console.error('Polling error:', error);
+                addLog(`Ошибка опроса: ${error.message}`);
             });
     }, 2000);
 }
@@ -169,7 +241,16 @@ function stopSearch() {
 }
 function updateCurrentPhrases() {
   fetch('/api/task/progress/current')
-    .then(r => r.json())
+    .then(async response => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const text = await response.text();
+      if (!text) {
+        throw new Error('Empty response from server');
+      }
+      return JSON.parse(text);
+    })
     .then(data => {
       let html = '';
       if (data.LastPhrases && data.LastPhrases.length > 0) {
@@ -184,10 +265,132 @@ function updateCurrentPhrases() {
       }
       document.getElementById('currentPhrasesBlock').innerHTML = html;
     })
-    .catch(() => {
+    .catch(error => {
+      console.error('Error updating current phrases:', error);
       document.getElementById('currentPhrasesBlock').innerHTML = 'Ошибка получения данных.';
     });
 }
+
+function updateLiveLog() {
+  console.log('[LIVE-LOG] Starting updateLiveLog...');
+  fetch('/api/task/live-log')
+    .then(async response => {
+      console.log('[LIVE-LOG] Response status:', response.status);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const text = await response.text();
+      console.log('[LIVE-LOG] Response text length:', text.length);
+      if (!text) {
+        throw new Error('Empty response from server');
+      }
+      return JSON.parse(text);
+    })
+    .then(data => {
+      console.log('[LIVE-LOG] Parsed data:', data);
+      console.log('[LIVE-LOG] Success field:', data.success);
+      console.log('[LIVE-LOG] Phrases field:', data.phrases);
+      console.log('[LIVE-LOG] Phrases length:', data.phrases ? data.phrases.length : 'undefined');
+      
+      if (data.success && data.phrases && Array.isArray(data.phrases)) {
+        const container = document.getElementById('liveLogContainer');
+        const countBadge = document.getElementById('phraseCount');
+        const speedBadge = document.getElementById('speedBadge');
+
+        // Фильтруем только обработанные фразы (статус "checked" или "found")
+        const processedPhrases = data.phrases.filter(item => 
+          item.status === 'checked' || item.status === 'found' || item.status === 'valid' || item.status === 'invalid'
+        );
+        
+        // Отображаем последние 50 обработанных записей
+        const phrases = processedPhrases.slice(-50);
+        console.log('[LIVE-LOG] Processed phrases count:', phrases.length);
+        countBadge.textContent = phrases.length;
+
+        // Рассчитываем скорость
+        const currentTime = new Date().getTime();
+        const timeDiff = currentTime - (data.lastTimestamp || 0);
+        const phrasesProcessed = data.processedCombinations || data.processedCombinations || 0;
+        const speed = timeDiff > 0 ? (phrasesProcessed / timeDiff) * 1000 : 0;
+        speedBadge.textContent = `${speed.toFixed(0)} фраз/сек`;
+
+        if (phrases.length > 0) {
+          console.log('[LIVE-LOG] First processed phrase:', phrases[0]);
+          let html = '<div class="table-responsive"><table class="table table-sm table-striped">';
+          html += '<thead><tr><th>Время</th><th>Индекс</th><th>Фраза</th><th>Адрес</th><th>Статус</th></tr></thead><tbody>';
+          
+          phrases.forEach(item => {
+            const time = new Date(item.timestamp).toLocaleTimeString();
+            const statusColor = getStatusColor(item.status);
+            const statusText = getStatusText(item.status);
+            const isValid = item.isValid !== undefined && item.isValid !== null ? 
+              (item.isValid ? '✅' : '❌') : '';
+            
+            html += `<tr>
+              <td class="text-muted small">${time}</td>
+              <td class="text-primary">${item.entryIndex || item.index || '-'}</td>
+              <td class="font-monospace small">${item.phrase}</td>
+              <td class="text-success small">${item.address || '-'}</td>
+              <td><span class="${statusColor}">${statusText}</span> ${isValid}</td>
+            </tr>`;
+          });
+          
+          html += '</tbody></table></div>';
+          container.innerHTML = html;
+          console.log('[LIVE-LOG] Table HTML generated and set to container');
+        } else {
+          console.log('[LIVE-LOG] No processed phrases, showing waiting message');
+          container.innerHTML = '<p class="text-muted">Ожидание обработанных данных...</p>';
+        }
+        container.scrollTop = container.scrollHeight;
+      } else {
+        console.log('[LIVE-LOG] Data not successful or no phrases:', data);
+        console.log('[LIVE-LOG] Success:', data.success);
+        console.log('[LIVE-LOG] Phrases type:', typeof data.phrases);
+        console.log('[LIVE-LOG] Phrases is array:', Array.isArray(data.phrases));
+      }
+    })
+    .catch(error => {
+      console.error('[LIVE-LOG] Error updating live log:', error);
+      document.getElementById('liveLogContainer').innerHTML = '<p class="text-danger">Ошибка получения данных.</p>';
+    });
+}
+
+function getStatusColor(status) {
+  switch(status) {
+    case 'processing': return 'text-warning';
+    case 'checked': return 'text-info';
+    case 'found': return 'text-success';
+    case 'valid': return 'text-success';
+    case 'invalid': return 'text-danger';
+    default: return 'text-secondary';
+  }
+}
+
+function getStatusText(status) {
+  switch(status) {
+    case 'processing': return 'Обработка';
+    case 'checked': return 'Проверено';
+    case 'found': return 'НАЙДЕНО!';
+    case 'valid': return 'Валидно';
+    case 'invalid': return 'Невалидно';
+    default: return status;
+  }
+}
+
+function clearLiveLog() {
+  document.getElementById('liveLogContainer').innerHTML = '<p class="text-muted">Обработанные фразы очищены...</p>';
+  document.getElementById('phraseCount').textContent = '0';
+  document.getElementById('speedBadge').textContent = '0 фраз/сек';
+}
+
+// Обновляем данные каждые 1-2 секунды
+console.log('[LIVE-LOG] Setting up intervals...');
 setInterval(updateCurrentPhrases, 3000);
+setInterval(updateLiveLog, 1000); // Частое обновление для детального лайв журнала
+
+// Инициализация
+console.log('[LIVE-LOG] Initializing...');
 updateCurrentPhrases();
+updateLiveLog();
 </script> 

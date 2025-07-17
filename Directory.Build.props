@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net8.0-android</TargetFramework>
+    <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
+    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+</Project> 

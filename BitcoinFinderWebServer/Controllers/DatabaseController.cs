@@ -44,151 +44,133 @@ namespace BitcoinFinderWebServer.Controllers
         }
 
         /// <summary>
-        /// Устанавливает базу данных (создание, схема, начальные данные)
+        /// Устанавливает базу данных
         /// </summary>
-        [HttpPost("install")]
-        public async Task<IActionResult> InstallDatabase([FromBody] DatabaseInstallRequest request)
+        [HttpPost("setup")]
+        public async Task<IActionResult> SetupDatabase([FromBody] DatabaseSetupRequest request)
         {
             try
             {
-                _logger.LogInformation("Запрос на установку базы данных: {DatabaseName}", request.Config.DatabaseName);
-                
-                var result = await _databaseService.InstallDatabaseAsync(request);
-                
-                if (result.Success)
+                _logger.LogInformation("Начинаем установку базы данных: {DatabaseName}", request.DatabaseName);
+
+                var config = new DatabaseConfig
                 {
-                    return Ok(result);
-                }
-                else
+                    DatabaseName = request.DatabaseName,
+                    Server = request.Server,
+                    Port = request.Port,
+                    Username = request.Username,
+                    Password = request.Password,
+                    AuthType = request.AuthType
+                };
+
+                var response = new DatabaseSetupResponse();
+
+                // Тестируем подключение
+                var isConnected = await _databaseService.TestConnectionAsync(config);
+                if (!isConnected)
                 {
-                    return BadRequest(result);
+                    response.Success = false;
+                    response.Message = "Не удалось подключиться к серверу базы данных";
+                    return BadRequest(response);
                 }
+
+                // Создаем базу данных если нужно
+                if (request.CreateDatabase)
+                {
+                    var dbResult = await _databaseService.CreateDatabaseAsync(config);
+                    if (!dbResult.Success)
+                    {
+                        response.Success = false;
+                        response.Message = $"Ошибка создания базы данных: {dbResult.Message}";
+                        response.Errors.AddRange(dbResult.Errors);
+                        return BadRequest(response);
+                    }
+                    response.DatabaseCreated = true;
+                }
+
+                // Создаем таблицы если нужно
+                if (request.CreateTables)
+                {
+                    var tablesResult = await _databaseService.CreateTablesAsync(config);
+                    if (!tablesResult.Success)
+                    {
+                        response.Success = false;
+                        response.Message = $"Ошибка создания таблиц: {tablesResult.Message}";
+                        response.Errors.AddRange(tablesResult.Errors);
+                        return BadRequest(response);
+                    }
+                    response.TablesCreated = true;
+                }
+
+                // Вставляем тестовые данные если нужно
+                if (request.InsertSampleData)
+                {
+                    var dataResult = await _databaseService.InsertSampleDataAsync(config);
+                    if (!dataResult.Success)
+                    {
+                        response.Success = false;
+                        response.Message = $"Ошибка вставки тестовых данных: {dataResult.Message}";
+                        response.Errors.AddRange(dataResult.Errors);
+                        return BadRequest(response);
+                    }
+                    response.SampleDataInserted = true;
+                }
+
+                response.Success = true;
+                response.Message = "База данных успешно настроена";
+                response.DatabaseName = request.DatabaseName;
+
+                _logger.LogInformation("База данных {DatabaseName} успешно настроена", request.DatabaseName);
+
+                return Ok(response);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка установки базы данных");
-                return StatusCode(500, new DatabaseInstallResponse 
-                { 
-                    Success = false, 
-                    Message = "Внутренняя ошибка сервера",
-                    Errors = { ex.Message }
-                });
+                return StatusCode(500, new { success = false, message = "Внутренняя ошибка сервера" });
             }
         }
 
         /// <summary>
-        /// Создает только базу данных
+        /// Получает статус базы данных
         /// </summary>
-        [HttpPost("create")]
-        public async Task<IActionResult> CreateDatabase([FromBody] DatabaseConfig config)
+        [HttpGet("status")]
+        public async Task<IActionResult> GetDatabaseStatus()
         {
             try
             {
-                var result = await _databaseService.CreateDatabaseAsync(config);
-                
-                if (result.Success)
-                {
-                    return Ok(result);
-                }
-                else
-                {
-                    return BadRequest(result);
-                }
+                var status = await _databaseService.GetDatabaseStatusAsync();
+                return Ok(new { success = true, status = status });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка создания базы данных");
-                return StatusCode(500, new DatabaseInstallResponse 
-                { 
-                    Success = false, 
-                    Message = "Внутренняя ошибка сервера",
-                    Errors = { ex.Message }
-                });
+                _logger.LogError(ex, "Ошибка получения статуса базы данных");
+                return StatusCode(500, new { success = false, message = "Внутренняя ошибка сервера" });
             }
         }
+    }
 
-        /// <summary>
-        /// Устанавливает только схему базы данных
-        /// </summary>
-        [HttpPost("install-schema")]
-        public async Task<IActionResult> InstallSchema([FromBody] DatabaseConfig config)
-        {
-            try
-            {
-                var result = await _databaseService.InstallSchemaAsync(config);
-                
-                if (result.Success)
-                {
-                    return Ok(result);
-                }
-                else
-                {
-                    return BadRequest(result);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка установки схемы базы данных");
-                return StatusCode(500, new DatabaseInstallResponse 
-                { 
-                    Success = false, 
-                    Message = "Внутренняя ошибка сервера",
-                    Errors = { ex.Message }
-                });
-            }
-        }
+    public class DatabaseSetupRequest
+    {
+        public string DatabaseName { get; set; } = "";
+        public string Server { get; set; } = "";
+        public int Port { get; set; } = 1433;
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string AuthType { get; set; } = "sql";
+        public bool CreateDatabase { get; set; } = true;
+        public bool CreateTables { get; set; } = true;
+        public bool InsertSampleData { get; set; } = false;
+    }
 
-        /// <summary>
-        /// Устанавливает начальные данные
-        /// </summary>
-        [HttpPost("install-seed-data")]
-        public async Task<IActionResult> InstallSeedData([FromBody] DatabaseConfig config)
-        {
-            try
-            {
-                var result = await _databaseService.InstallSeedDataAsync(config);
-                
-                if (result.Success)
-                {
-                    return Ok(result);
-                }
-                else
-                {
-                    return BadRequest(result);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка установки начальных данных");
-                return StatusCode(500, new DatabaseInstallResponse 
-                { 
-                    Success = false, 
-                    Message = "Внутренняя ошибка сервера",
-                    Errors = { ex.Message }
-                });
-            }
-        }
-
-        /// <summary>
-        /// Получает информацию о структуре базы данных
-        /// </summary>
-        [HttpGet("schema-info")]
-        public IActionResult GetSchemaInfo()
-        {
-            var schemaInfo = new
-            {
-                Tables = new[]
-                {
-                    new { Name = "Agents", Description = "Таблица агентов" },
-                    new { Name = "Tasks", Description = "Таблица задач" },
-                    new { Name = "TaskResults", Description = "Таблица результатов задач" },
-                    new { Name = "SystemSettings", Description = "Таблица системных настроек" }
-                },
-                Version = "1.0.0",
-                LastUpdated = DateTime.UtcNow
-            };
-
-            return Ok(schemaInfo);
-        }
+    public class DatabaseSetupResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = "";
+        public string DatabaseName { get; set; } = "";
+        public bool DatabaseCreated { get; set; }
+        public bool TablesCreated { get; set; }
+        public bool SampleDataInserted { get; set; }
+        public List<string> Errors { get; set; } = new List<string>();
     }
 } 

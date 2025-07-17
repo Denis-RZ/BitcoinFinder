@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="BitcoinFinderAndroidNew.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:local="clr-namespace:BitcoinFinderAndroidNew"
+    Title="BitcoinFinderAndroidNew">
+
+    <TabBar>
+        <Tab Title="🔍 Поиск" Icon="search.png">
+            <ShellContent
+                Title="Основной поиск"
+                ContentTemplate="{DataTemplate local:MainPage}"
+                Route="MainPage" />
+        </Tab>
+        
+        <Tab Title="🔐 Восстановление" Icon="recovery.png">
+            <ShellContent
+                Title="Восстановление кошелька"
+                ContentTemplate="{DataTemplate local:StolenWalletRecoveryPage}"
+                Route="StolenWalletRecoveryPage" />
+        </Tab>
+    </TabBar>
+
+</Shell>

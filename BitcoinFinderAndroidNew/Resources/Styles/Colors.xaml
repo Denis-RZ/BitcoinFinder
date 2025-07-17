@@ -1,0 +1,68 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<?xaml-comp compile="true" ?>
+<ResourceDictionary 
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- Modern Color Palette -->
+    <Color x:Key="Primary">#2196F3</Color>
+    <Color x:Key="PrimaryDark">#1976D2</Color>
+    <Color x:Key="PrimaryLight">#BBDEFB</Color>
+    <Color x:Key="PrimaryLighter">#E3F2FD</Color>
+    
+    <Color x:Key="Secondary">#FF9800</Color>
+    <Color x:Key="SecondaryDark">#F57C00</Color>
+    <Color x:Key="SecondaryLight">#FFE0B2</Color>
+    
+    <Color x:Key="Success">#4CAF50</Color>
+    <Color x:Key="SuccessDark">#388E3C</Color>
+    <Color x:Key="SuccessLight">#C8E6C9</Color>
+    
+    <Color x:Key="Warning">#FF9800</Color>
+    <Color x:Key="WarningDark">#F57C00</Color>
+    <Color x:Key="WarningLight">#FFE0B2</Color>
+    
+    <Color x:Key="Error">#F44336</Color>
+    <Color x:Key="ErrorDark">#D32F2F</Color>
+    <Color x:Key="ErrorLight">#FFCDD2</Color>
+    
+    <Color x:Key="Info">#2196F3</Color>
+    <Color x:Key="InfoDark">#1976D2</Color>
+    <Color x:Key="InfoLight">#BBDEFB</Color>
+    
+    <Color x:Key="Surface">#FFFFFF</Color>
+    <Color x:Key="SurfaceDark">#F5F5F5</Color>
+    <Color x:Key="SurfaceDarker">#EEEEEE</Color>
+    
+    <Color x:Key="OnSurface">#212121</Color>
+    <Color x:Key="OnSurfaceMedium">#666666</Color>
+    <Color x:Key="OnSurfaceLight">#9E9E9E</Color>
+    
+    <Color x:Key="Background">#FAFAFA</Color>
+    <Color x:Key="BackgroundDark">#F5F5F5</Color>
+    
+    <Color x:Key="Divider">#E0E0E0</Color>
+    <Color x:Key="DividerDark">#BDBDBD</Color>
+    
+    <!-- Bitcoin Theme Colors -->
+    <Color x:Key="BitcoinGold">#F7931A</Color>
+    <Color x:Key="BitcoinGoldDark">#E67E00</Color>
+    <Color x:Key="BitcoinGoldLight">#FFD54F</Color>
+    
+    <Color x:Key="BitcoinOrange">#FF9800</Color>
+    <Color x:Key="BitcoinOrangeDark">#F57C00</Color>
+    <Color x:Key="BitcoinOrangeLight">#FFE0B2</Color>
+    
+    <!-- Status Colors -->
+    <Color x:Key="StatusRunning">#4CAF50</Color>
+    <Color x:Key="StatusStopped">#F44336</Color>
+    <Color x:Key="StatusWaiting">#FF9800</Color>
+    <Color x:Key="StatusCompleted">#2196F3</Color>
+    
+    <!-- Progress Colors -->
+    <Color x:Key="ProgressBackground">#E0E0E0</Color>
+    <Color x:Key="ProgressFill">#4CAF50</Color>
+    <Color x:Key="ProgressFillWarning">#FF9800</Color>
+    <Color x:Key="ProgressFillError">#F44336</Color>
+
+</ResourceDictionary>

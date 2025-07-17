@@ -1,0 +1,174 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<?xaml-comp compile="true" ?>
+<ResourceDictionary 
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- Import Colors -->
+    <ResourceDictionary Source="Colors.xaml" />
+
+    <!-- Modern Button Styles -->
+    <Style x:Key="PrimaryButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+        <Setter Property="TextColor" Value="White" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="MinimumHeightRequest" Value="48" />
+    </Style>
+
+    <Style x:Key="SuccessButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{StaticResource Success}" />
+        <Setter Property="TextColor" Value="White" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="MinimumHeightRequest" Value="48" />
+    </Style>
+
+    <Style x:Key="ErrorButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{StaticResource Error}" />
+        <Setter Property="TextColor" Value="White" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="MinimumHeightRequest" Value="48" />
+    </Style>
+
+    <Style x:Key="WarningButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{StaticResource Warning}" />
+        <Setter Property="TextColor" Value="White" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="MinimumHeightRequest" Value="48" />
+    </Style>
+
+    <!-- Modern Entry Styles -->
+    <Style x:Key="ModernEntry" TargetType="Entry">
+        <Setter Property="BackgroundColor" Value="{StaticResource Surface}" />
+        <Setter Property="TextColor" Value="{StaticResource OnSurface}" />
+        <Setter Property="PlaceholderColor" Value="{StaticResource OnSurfaceLight}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="MinimumHeightRequest" Value="48" />
+    </Style>
+
+    <!-- Modern Picker Styles -->
+    <Style x:Key="ModernPicker" TargetType="Picker">
+        <Setter Property="BackgroundColor" Value="{StaticResource Surface}" />
+        <Setter Property="TextColor" Value="{StaticResource OnSurface}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="MinimumHeightRequest" Value="48" />
+    </Style>
+
+    <!-- Modern Label Styles -->
+    <Style x:Key="HeaderLabel" TargetType="Label">
+        <Setter Property="TextColor" Value="{StaticResource Primary}" />
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="Margin" Value="0,8,0,4" />
+    </Style>
+
+    <Style x:Key="SubHeaderLabel" TargetType="Label">
+        <Setter Property="TextColor" Value="{StaticResource OnSurface}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="Margin" Value="0,4,0,2" />
+    </Style>
+
+    <Style x:Key="BodyLabel" TargetType="Label">
+        <Setter Property="TextColor" Value="{StaticResource OnSurface}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Margin" Value="0,2,0,2" />
+    </Style>
+
+    <Style x:Key="CaptionLabel" TargetType="Label">
+        <Setter Property="TextColor" Value="{StaticResource OnSurfaceMedium}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Margin" Value="0,1,0,1" />
+    </Style>
+
+    <!-- Modern Frame Styles -->
+    <Style x:Key="CardFrame" TargetType="Frame">
+        <Setter Property="BackgroundColor" Value="{StaticResource Surface}" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="HasShadow" Value="True" />
+        <Setter Property="Margin" Value="0,8,0,8" />
+    </Style>
+
+    <Style x:Key="InputFrame" TargetType="Frame">
+        <Setter Property="BackgroundColor" Value="{StaticResource SurfaceDark}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="Margin" Value="0,4,0,4" />
+    </Style>
+
+    <Style x:Key="StatusFrame" TargetType="Frame">
+        <Setter Property="BackgroundColor" Value="{StaticResource PrimaryLighter}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="Margin" Value="0,4,0,4" />
+    </Style>
+
+    <!-- Progress Bar Styles -->
+    <Style x:Key="ModernProgressBar" TargetType="ProgressBar">
+        <Setter Property="ProgressColor" Value="{StaticResource ProgressFill}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource ProgressBackground}" />
+        <Setter Property="HeightRequest" Value="8" />
+    </Style>
+
+    <!-- Bitcoin Theme Styles -->
+    <Style x:Key="BitcoinButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{StaticResource BitcoinGold}" />
+        <Setter Property="TextColor" Value="White" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="MinimumHeightRequest" Value="48" />
+    </Style>
+
+    <Style x:Key="BitcoinFrame" TargetType="Frame">
+        <Setter Property="BackgroundColor" Value="{StaticResource BitcoinGoldLight}" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="HasShadow" Value="True" />
+        <Setter Property="Margin" Value="0,8,0,8" />
+    </Style>
+
+    <!-- Log Display Styles -->
+    <Style x:Key="LogFrame" TargetType="Frame">
+        <Setter Property="BackgroundColor" Value="{StaticResource SurfaceDarker}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="12" />
+        <Setter Property="Margin" Value="0,4,0,4" />
+    </Style>
+
+    <Style x:Key="LogLabel" TargetType="Label">
+        <Setter Property="TextColor" Value="{StaticResource OnSurface}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontFamily" Value="Monospace" />
+        <Setter Property="Margin" Value="0,1,0,1" />
+    </Style>
+
+    <!-- Result Display Styles -->
+    <Style x:Key="ResultFrame" TargetType="Frame">
+        <Setter Property="BackgroundColor" Value="{StaticResource SuccessLight}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="12" />
+        <Setter Property="Margin" Value="0,4,0,4" />
+    </Style>
+
+    <Style x:Key="ResultLabel" TargetType="Label">
+        <Setter Property="TextColor" Value="{StaticResource SuccessDark}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="Margin" Value="0,2,0,2" />
+    </Style>
+
+</ResourceDictionary>

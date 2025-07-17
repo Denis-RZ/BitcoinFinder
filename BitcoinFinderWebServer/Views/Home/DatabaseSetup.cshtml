@@ -96,8 +96,9 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
-    margin-right: 10px;
-    margin-bottom: 10px;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
 }
 .btn-primary {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -105,49 +106,144 @@ body {
 }
 .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-}
-.btn-secondary {
-    background: #6c757d;
-    color: white;
-}
-.btn-secondary:hover {
-    background: #5a6268;
+    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
 }
 .btn-success {
-    background: #28a745;
+    background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
     color: white;
 }
-.btn-success:hover {
-    background: #218838;
+.btn-warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
 }
 .btn-danger {
-    background: #dc3545;
+    background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
     color: white;
 }
-.btn-danger:hover {
-    background: #c82333;
+.btn-info {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
 }
-.status {
+.tabs {
+    display: flex;
+    border-bottom: 2px solid #e1e8ed;
+    margin-bottom: 30px;
+    overflow-x: auto;
+}
+.tab {
+    padding: 15px 25px;
+    background: #f8f9fa;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    color: #6c757d;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    border-radius: 8px 8px 0 0;
+    margin-right: 5px;
+}
+.tab:hover {
+    background: #e9ecef;
+    color: #495057;
+}
+.tab.active {
+    background: #667eea;
+    color: white;
+}
+.tab-content {
+    display: none;
+}
+.tab-content.active {
+    display: block;
+}
+.status-card {
+    background: white;
+    border: 1px solid #e1e8ed;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+.status-card h3 {
+    color: #2c3e50;
+    margin-bottom: 15px;
+    font-size: 1.2em;
+}
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f3f4;
+}
+.status-item:last-child {
+    border-bottom: none;
+}
+.status-label {
+    font-weight: 600;
+    color: #495057;
+}
+.status-value {
+    color: #6c757d;
+}
+.status-value.success {
+    color: #28a745;
+}
+.status-value.error {
+    color: #dc3545;
+}
+.status-value.warning {
+    color: #ffc107;
+}
+.log-container {
+    background: #1e1e1e;
+    color: #00ff00;
+    padding: 20px;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 20px;
+}
+.log-entry {
+    margin-bottom: 5px;
+    padding: 2px 0;
+}
+.log-entry.error {
+    color: #ff6b6b;
+}
+.log-entry.warning {
+    color: #ffd93d;
+}
+.log-entry.info {
+    color: #4ecdc4;
+}
+.alert {
     padding: 15px;
     border-radius: 8px;
     margin-bottom: 20px;
-    display: none;
+    border: 1px solid transparent;
 }
-.status.success {
-    background: #d4edda;
-    border: 1px solid #c3e6cb;
+.alert-success {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
     color: #155724;
 }
-.status.error {
-    background: #f8d7da;
-    border: 1px solid #f5c6cb;
+.alert-danger {
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
     color: #721c24;
 }
-.status.warning {
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
+.alert-warning {
+    background-color: #fff3cd;
+    border-color: #ffeaa7;
     color: #856404;
+}
+.alert-info {
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+    color: #0c5460;
 }
 .loading {
     display: none;
@@ -160,89 +256,18 @@ body {
     border-radius: 50%;
     width: 40px;
     height: 40px;
-    /* animation: spin 1s linear infinite; */
+    animation: spin 1s linear infinite;
     margin: 0 auto 10px;
 }
-.log-container {
-    background: #2c3e50;
-    color: #ecf0f1;
-    padding: 20px;
-    border-radius: 8px;
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
-    max-height: 300px;
-    overflow-y: auto;
-    margin-top: 20px;
-}
-.log-entry {
-    margin-bottom: 5px;
-    padding: 5px;
-    border-radius: 4px;
-}
-.log-entry.info {
-    background: rgba(52, 152, 219, 0.2);
-}
-.log-entry.success {
-    background: rgba(46, 204, 113, 0.2);
-}
-.log-entry.error {
-    background: rgba(231, 76, 60, 0.2);
-}
-.log-entry.warning {
-    background: rgba(243, 156, 18, 0.2);
-}
-.tabs {
-    display: flex;
-    border-bottom: 2px solid #e1e8ed;
-    margin-bottom: 30px;
-}
-.tab {
-    padding: 15px 30px;
-    cursor: pointer;
-    border-bottom: 3px solid transparent;
-    transition: all 0.3s ease;
-    font-weight: 600;
-}
-.tab.active {
-    border-bottom-color: #667eea;
-    color: #667eea;
-}
-.tab:hover {
-    background: #f8f9fa;
-}
-.tab-content {
-    display: none;
-}
-.tab-content.active {
-    display: block;
-}
-.metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-}
-.metric-card {
-    background: white;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-    text-align: center;
-}
-.metric-value {
-    font-size: 2em;
-    font-weight: bold;
-    color: #667eea;
-    margin-bottom: 5px;
-}
-.metric-label {
-    color: #6c757d;
-    font-size: 0.9em;
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 </style>
+
 <div class="container">
     <div class="header">
-        <h1>🔧 Установка базы данных</h1>
+        <h1>🔧 Управление базой данных</h1>
         <p>BitcoinFinder Web Server - Административная панель</p>
     </div>
     <div class="content">
@@ -252,7 +277,9 @@ body {
             <div class="tab" onclick="showTab('agents')">Агенты</div>
             <div class="tab" onclick="showTab('status')">Статус системы</div>
             <div class="tab" onclick="showTab('keepalive')">Keep-Alive</div>
+            <div class="tab" onclick="showTab('cron')">Cron API</div>
         </div>
+
         <!-- Вкладка установки базы данных -->
         <div id="setup" class="tab-content active">
             <div class="form-section">
@@ -288,111 +315,528 @@ body {
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" id="createDatabase" checked>
-                    <label for="createDatabase">Создать базу данных</label>
+                    <label for="createDatabase">Создать базу данных если не существует</label>
                 </div>
                 <div class="checkbox-group">
-                    <input type="checkbox" id="installSchema" checked>
-                    <label for="installSchema">Установить схему</label>
+                    <input type="checkbox" id="createTables" checked>
+                    <label for="createTables">Создать таблицы если не существуют</label>
                 </div>
                 <div class="checkbox-group">
-                    <input type="checkbox" id="installSeedData">
-                    <label for="installSeedData">Установить начальные данные</label>
+                    <input type="checkbox" id="insertSampleData">
+                    <label for="insertSampleData">Вставить тестовые данные</label>
                 </div>
-                <div class="status" id="setupStatus"></div>
-                <div class="loading" id="setupLoading">
-                    <div class="spinner"></div>
-                    <p>Выполняется установка базы данных...</p>
-                </div>
-                <button class="btn btn-primary" onclick="testConnection()">🔍 Тест подключения</button>
-                <button class="btn btn-success" onclick="installDatabase()">🚀 Установить базу данных</button>
-                <button class="btn btn-secondary" onclick="getSchemaInfo()">📋 Информация о схеме</button>
+                <button class="btn btn-primary" onclick="testConnection()">Тестировать подключение</button>
+                <button class="btn btn-success" onclick="setupDatabase()">Установить базу данных</button>
             </div>
-            <div class="log-container" id="setupLog"></div>
         </div>
+
         <!-- Вкладка перебора seed-фраз -->
         <div id="seed" class="tab-content">
             <div class="form-section">
-                <h2>🔑 Перебор Seed-фраз</h2>
-                <div class="form-group">
-                    <label for="seedPhrase">Seed-фраза (или маска)</label>
-                    <input type="text" id="seedPhrase" placeholder="Введите seed-фразу или маску">
+                <h2>🔍 Создание задачи перебора</h2>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="taskName">Название задачи *</label>
+                        <input type="text" id="taskName" value="Тестовая задача" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="targetAddress">Целевой Bitcoin адрес *</label>
+                        <input type="text" id="targetAddress" value="1MCirzugBCrn5H6jHix6PJSLX7EqUEniBQ" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="wordCount">Количество слов</label>
+                        <select id="wordCount">
+                            <option value="12">12 слов</option>
+                            <option value="24">24 слова</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="startIndex">Начальный индекс</label>
+                        <input type="number" id="startIndex" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="endIndex">Конечный индекс</label>
+                        <input type="number" id="endIndex" value="100000" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="blockSize">Размер блока</label>
+                        <input type="number" id="blockSize" value="10000" min="1000" max="100000">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="address">Ожидаемый адрес (опционально)</label>
-                    <input type="text" id="address" placeholder="1...">
-                </div>
-                <button class="btn btn-primary" onclick="startSeedSearch()">🚀 Начать перебор</button>
-                <button class="btn btn-secondary" onclick="stopSeedSearch()">⏹️ Остановить</button>
-                <div class="status" id="seedStatus"></div>
-                <div class="log-container" id="seedLog"></div>
-            </div>
-            <div class="form-section">
-                <h2>📝 Добавить задачу (seed-фразу)</h2>
-                <div class="form-group">
-                    <input type="text" id="newSeedTask" placeholder="Введите seed-фразу или маску">
-                    <button class="btn btn-success" onclick="addSeedTask()">Добавить задачу</button>
-                </div>
-                <div class="log-container" id="seedTaskLog"></div>
-            </div>
-            <div class="form-section">
-                <h2>📋 Активные задачи перебора</h2>
-                <table style="width:100%;background:#fff;color:#222;border-radius:8px;overflow:hidden;">
-                    <thead><tr><th>Seed-фраза</th><th>Статус</th><th>Потоки</th><th>Действия</th></tr></thead>
-                    <tbody id="seedTasksTable"></tbody>
-                </table>
+                <button class="btn btn-primary" onclick="createTask()">Создать задачу</button>
+                <button class="btn btn-success" onclick="createAndStartTask()">Создать и запустить</button>
             </div>
         </div>
+
         <!-- Вкладка агентов -->
         <div id="agents" class="tab-content">
             <div class="form-section">
                 <h2>🤖 Управление агентами</h2>
-                <button class="btn btn-primary" onclick="loadAgents()">🔄 Обновить список</button>
-                <div class="status" id="agentsStatus"></div>
-                <table style="width:100%;margin-top:20px;background:#fff;color:#222;border-radius:8px;overflow:hidden;">
-                    <thead><tr><th>Имя</th><th>Статус</th><th>Потоки</th><th>Последний онлайн</th><th>Действия</th></tr></thead>
-                    <tbody id="agentsTable"></tbody>
-                </table>
+                <div class="status-card">
+                    <h3>Статус агентов</h3>
+                    <div id="agentsStatus">Загрузка...</div>
+                </div>
+                <button class="btn btn-info" onclick="refreshAgentsStatus()">Обновить статус</button>
+                <button class="btn btn-warning" onclick="disconnectAllAgents()">Отключить всех агентов</button>
             </div>
         </div>
+
         <!-- Вкладка статуса системы -->
         <div id="status" class="tab-content">
             <div class="form-section">
-                <h2>📈 Статус системы</h2>
-                <div class="metrics-grid" id="metricsGrid">
-                    <!-- Метрики будут загружены динамически -->
+                <h2>📊 Статус системы</h2>
+                <div class="status-card">
+                    <h3>Общая информация</h3>
+                    <div id="systemStatus">Загрузка...</div>
                 </div>
-                <div class="status" id="statusStatus"></div>
-                <div class="loading" id="statusLoading">
-                    <div class="spinner"></div>
-                    <p>Загрузка статуса системы...</p>
+                <div class="status-card">
+                    <h3>Задачи</h3>
+                    <div id="tasksStatus">Загрузка...</div>
                 </div>
-                <button class="btn btn-primary" onclick="loadSystemStatus()">🔄 Обновить статус</button>
-                <button class="btn btn-success" onclick="loadHealthCheck()">🏥 Проверка здоровья</button>
-                <button class="btn btn-secondary" onclick="loadMetrics()">📊 Метрики</button>
+                <button class="btn btn-info" onclick="refreshSystemStatus()">Обновить статус</button>
             </div>
-            <div class="log-container" id="statusLog"></div>
         </div>
+
         <!-- Вкладка Keep-Alive -->
         <div id="keepalive" class="tab-content">
             <div class="form-section">
-                <h2>💓 Keep-Alive мониторинг</h2>
-                <div class="status" id="keepaliveStatus"></div>
-                <div class="loading" id="keepaliveLoading">
-                    <div class="spinner"></div>
-                    <p>Проверка активности сервера...</p>
+                <h2>💓 Keep-Alive система</h2>
+                <div class="status-card">
+                    <h3>Статус Keep-Alive</h3>
+                    <div id="keepAliveStatus">Загрузка...</div>
                 </div>
-                <button class="btn btn-primary" onclick="pingServer()">🏓 Ping сервера</button>
-                <button class="btn btn-success" onclick="activateServices()">⚡ Активировать сервисы</button>
-                <button class="btn btn-secondary" onclick="startKeepAlive()">🔄 Запустить мониторинг</button>
-                <button class="btn btn-danger" onclick="stopKeepAlive()">⏹️ Остановить мониторинг</button>
+                <button class="btn btn-primary" onclick="testKeepAlive()">Тест Keep-Alive</button>
+                <button class="btn btn-success" onclick="testHealth()">Тест Health Check</button>
+                <div class="log-container" id="keepAliveLog"></div>
             </div>
-            <div class="log-container" id="keepaliveLog"></div>
         </div>
+
+        <!-- Вкладка Cron API -->
+        <div id="cron" class="tab-content">
+            <div class="form-section">
+                <h2>⏰ Cron API</h2>
+                <div class="status-card">
+                    <h3>Доступные endpoints</h3>
+                    <div class="status-item">
+                        <span class="status-label">GET /api/cron/ping</span>
+                        <span class="status-value">Основной ping для cron</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">GET /api/cron/tasks-status</span>
+                        <span class="status-value">Статус всех задач</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">POST /api/cron/create-task</span>
+                        <span class="status-value">Создание новой задачи</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">POST /api/cron/reset-pool</span>
+                        <span class="status-value">Сброс пула</span>
+                    </div>
+                </div>
+                <h3>Команды для cron</h3>
+                <div class="form-group">
+                    <label>Ping каждые 15 минут:</label>
+                    <input type="text" value="*/15 * * * * curl -s &quot;https://your-domain.com/api/cron/ping&quot; > /dev/null 2>&1" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Health check каждые 30 минут:</label>
+                    <input type="text" value="*/30 * * * * curl -s &quot;https://your-domain.com/api/keep-alive/health&quot; > /dev/null 2>&1" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Сброс пула каждые 2 часа:</label>
+                    <input type="text" value="0 */2 * * * curl -s -X POST &quot;https://your-domain.com/api/cron/reset-pool&quot; > /dev/null 2>&1" readonly>
+                </div>
+                <button class="btn btn-primary" onclick="testCronPing()">Тест Cron Ping</button>
+                <button class="btn btn-success" onclick="testCronTasksStatus()">Тест Tasks Status</button>
+                <div class="log-container" id="cronLog"></div>
+            </div>
+        </div>
+
+        <!-- Индикатор загрузки -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Выполняется операция...</p>
+        </div>
+
+        <!-- Лог операций -->
+        <div class="log-container" id="operationLog"></div>
     </div>
 </div>
+
 <script>
-// Вставлен весь JS из legacy-файла
-let keepAliveInterval = null;
-const baseUrl = window.location.origin;
-// ... (оставшийся JS из legacy-файла, как в предыдущем файле) ...
+function showTab(tabName) {
+    // Скрываем все вкладки
+    const tabContents = document.querySelectorAll('.tab-content');
+    tabContents.forEach(content => content.classList.remove('active'));
+    
+    // Убираем активный класс у всех табов
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(tab => tab.classList.remove('active'));
+    
+    // Показываем нужную вкладку
+    document.getElementById(tabName).classList.add('active');
+    
+    // Добавляем активный класс к табу
+    event.target.classList.add('active');
+    
+    // Загружаем данные для вкладки
+    loadTabData(tabName);
+}
+
+function loadTabData(tabName) {
+    switch(tabName) {
+        case 'agents':
+            refreshAgentsStatus();
+            break;
+        case 'status':
+            refreshSystemStatus();
+            break;
+        case 'keepalive':
+            testKeepAlive();
+            break;
+    }
+}
+
+function toggleAuthFields() {
+    const authType = document.getElementById('authType').value;
+    const usernameField = document.getElementById('username');
+    const passwordField = document.getElementById('password');
+    
+    if (authType === 'windows') {
+        usernameField.disabled = true;
+        passwordField.disabled = true;
+        usernameField.value = '';
+        passwordField.value = '';
+    } else {
+        usernameField.disabled = false;
+        passwordField.disabled = false;
+    }
+}
+
+function showLoading() {
+    document.getElementById('loading').style.display = 'block';
+}
+
+function hideLoading() {
+    document.getElementById('loading').style.display = 'none';
+}
+
+function addLog(message, type = 'info') {
+    const log = document.getElementById('operationLog');
+    const timestamp = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    entry.textContent = `[${timestamp}] ${message}`;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+}
+
+function addKeepAliveLog(message, type = 'info') {
+    const log = document.getElementById('keepAliveLog');
+    const timestamp = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    entry.textContent = `[${timestamp}] ${message}`;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+}
+
+function addCronLog(message, type = 'info') {
+    const log = document.getElementById('cronLog');
+    const timestamp = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    entry.textContent = `[${timestamp}] ${message}`;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+}
+
+async function testConnection() {
+    showLoading();
+    addLog('Тестирование подключения к базе данных...', 'info');
+    
+    try {
+        const config = {
+            databaseName: document.getElementById('databaseName').value,
+            server: document.getElementById('server').value,
+            port: parseInt(document.getElementById('port').value),
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value,
+            authType: document.getElementById('authType').value
+        };
+        
+        const response = await fetch('/api/database/test-connection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(config)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            addLog('✅ Подключение к базе данных успешно!', 'info');
+        } else {
+            addLog(`❌ Ошибка подключения: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        addLog(`❌ Ошибка: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function setupDatabase() {
+    showLoading();
+    addLog('Установка базы данных...', 'info');
+    
+    try {
+        const config = {
+            databaseName: document.getElementById('databaseName').value,
+            server: document.getElementById('server').value,
+            port: parseInt(document.getElementById('port').value),
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value,
+            authType: document.getElementById('authType').value,
+            createDatabase: document.getElementById('createDatabase').checked,
+            createTables: document.getElementById('createTables').checked,
+            insertSampleData: document.getElementById('insertSampleData').checked
+        };
+        
+        const response = await fetch('/api/database/setup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(config)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            addLog('✅ База данных успешно установлена!', 'info');
+        } else {
+            addLog(`❌ Ошибка установки: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        addLog(`❌ Ошибка: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function createTask() {
+    showLoading();
+    addLog('Создание задачи...', 'info');
+    
+    try {
+        const taskData = {
+            name: document.getElementById('taskName').value,
+            targetAddress: document.getElementById('targetAddress').value,
+            wordCount: parseInt(document.getElementById('wordCount').value),
+            startIndex: parseInt(document.getElementById('startIndex').value),
+            endIndex: parseInt(document.getElementById('endIndex').value),
+            blockSize: parseInt(document.getElementById('blockSize').value),
+            threads: 1,
+            autoStart: false
+        };
+        
+        const response = await fetch('/api/cron/create-task', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(taskData)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            addLog(`✅ Задача создана! ID: ${result.taskId}`, 'info');
+        } else {
+            addLog(`❌ Ошибка создания задачи: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        addLog(`❌ Ошибка: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function createAndStartTask() {
+    showLoading();
+    addLog('Создание и запуск задачи...', 'info');
+    
+    try {
+        const taskData = {
+            name: document.getElementById('taskName').value,
+            targetAddress: document.getElementById('targetAddress').value,
+            wordCount: parseInt(document.getElementById('wordCount').value),
+            startIndex: parseInt(document.getElementById('startIndex').value),
+            endIndex: parseInt(document.getElementById('endIndex').value),
+            blockSize: parseInt(document.getElementById('blockSize').value),
+            threads: 1,
+            autoStart: true
+        };
+        
+        const response = await fetch('/api/cron/create-task', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(taskData)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            addLog(`✅ Задача создана и запущена! ID: ${result.taskId}`, 'info');
+        } else {
+            addLog(`❌ Ошибка: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        addLog(`❌ Ошибка: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function refreshAgentsStatus() {
+    try {
+        const response = await fetch('/api/agents/status');
+        const data = await response.json();
+        
+        const statusDiv = document.getElementById('agentsStatus');
+        statusDiv.innerHTML = `
+            <div class="status-item">
+                <span class="status-label">Подключенных агентов:</span>
+                <span class="status-value">${data.activeAgents || 0}</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Всего агентов:</span>
+                <span class="status-value">${data.totalAgents || 0}</span>
+            </div>
+        `;
+    } catch (error) {
+        document.getElementById('agentsStatus').innerHTML = `<span class="status-value error">Ошибка загрузки: ${error.message}</span>`;
+    }
+}
+
+async function refreshSystemStatus() {
+    try {
+        const response = await fetch('/api/cron/tasks-status');
+        const data = await response.json();
+        
+        const systemStatusDiv = document.getElementById('systemStatus');
+        const tasksStatusDiv = document.getElementById('tasksStatus');
+        
+        systemStatusDiv.innerHTML = `
+            <div class="status-item">
+                <span class="status-label">Всего задач:</span>
+                <span class="status-value">${data.totalTasks || 0}</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Запущенных задач:</span>
+                <span class="status-value">${data.runningTasks || 0}</span>
+            </div>
+        `;
+        
+        if (data.tasks && data.tasks.length > 0) {
+            tasksStatusDiv.innerHTML = data.tasks.map(task => `
+                <div class="status-item">
+                    <span class="status-label">${task.name}</span>
+                    <span class="status-value ${task.status === 'Running' ? 'success' : 'warning'}">${task.status}</span>
+                </div>
+            `).join('');
+        } else {
+            tasksStatusDiv.innerHTML = '<span class="status-value">Нет задач</span>';
+        }
+    } catch (error) {
+        document.getElementById('systemStatus').innerHTML = `<span class="status-value error">Ошибка загрузки: ${error.message}</span>`;
+        document.getElementById('tasksStatus').innerHTML = `<span class="status-value error">Ошибка загрузки: ${error.message}</span>`;
+    }
+}
+
+async function testKeepAlive() {
+    addKeepAliveLog('Тестирование Keep-Alive...', 'info');
+    
+    try {
+        const response = await fetch('/api/keep-alive');
+        const data = await response.json();
+        
+        addKeepAliveLog(`✅ Keep-Alive OK - Memory: ${data.memoryUsage}MB, Uptime: ${data.uptime}`, 'info');
+    } catch (error) {
+        addKeepAliveLog(`❌ Keep-Alive FAILED: ${error.message}`, 'error');
+    }
+}
+
+async function testHealth() {
+    addKeepAliveLog('Тестирование Health Check...', 'info');
+    
+    try {
+        const response = await fetch('/api/keep-alive/health');
+        const data = await response.json();
+        
+        addKeepAliveLog(`✅ Health OK - Status: ${data.status}`, 'info');
+    } catch (error) {
+        addKeepAliveLog(`❌ Health FAILED: ${error.message}`, 'error');
+    }
+}
+
+async function testCronPing() {
+    addCronLog('Тестирование Cron Ping...', 'info');
+    
+    try {
+        const response = await fetch('/api/cron/ping');
+        const data = await response.json();
+        
+        addCronLog(`✅ Cron Ping OK - Status: ${data.status}, Memory: ${data.memoryUsage}MB`, 'info');
+    } catch (error) {
+        addCronLog(`❌ Cron Ping FAILED: ${error.message}`, 'error');
+    }
+}
+
+async function testCronTasksStatus() {
+    addCronLog('Тестирование Tasks Status...', 'info');
+    
+    try {
+        const response = await fetch('/api/cron/tasks-status');
+        const data = await response.json();
+        
+        addCronLog(`✅ Tasks Status OK - Total: ${data.totalTasks}, Running: ${data.runningTasks}`, 'info');
+    } catch (error) {
+        addCronLog(`❌ Tasks Status FAILED: ${error.message}`, 'error');
+    }
+}
+
+async function disconnectAllAgents() {
+    if (confirm('Вы уверены, что хотите отключить всех агентов?')) {
+        addLog('Отключение всех агентов...', 'warning');
+        
+        try {
+            const response = await fetch('/api/agents/disconnect-all', {
+                method: 'POST'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                addLog('✅ Все агенты отключены', 'info');
+                refreshAgentsStatus();
+            } else {
+                addLog(`❌ Ошибка: ${result.message}`, 'error');
+            }
+        } catch (error) {
+            addLog(`❌ Ошибка: ${error.message}`, 'error');
+        }
+    }
+}
+
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    addLog('Страница управления базой данных загружена', 'info');
+    refreshSystemStatus();
+});
 </script> 

@@ -273,33 +273,200 @@ namespace BitcoinFinderWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Получение статуса агентов
+        /// </summary>
         [HttpGet("status")]
-        public async Task<IActionResult> GetAgentStatus()
+        public async Task<IActionResult> GetAgentsStatus()
         {
             try
             {
-                var status = await _agentManager.GetAgentStatusAsync();
-                return Ok(status);
+                var agents = await _agentManager.GetAllAgentsAsync();
+                var activeAgents = agents.Count(a => a.IsOnline);
+
+                return Ok(new
+                {
+                    success = true,
+                    totalAgents = agents.Count,
+                    activeAgents = activeAgents,
+                    agents = agents.Select(a => new
+                    {
+                        id = a.Id,
+                        name = a.Name,
+                        isOnline = a.IsOnline,
+                        lastSeen = a.LastSeen,
+                        processedBlocks = a.ProcessedBlocks,
+                        currentTask = a.CurrentTask
+                    })
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при получении статуса агентов");
-                return BadRequest(new { Success = false, Message = ex.Message });
+                _logger.LogError(ex, "Ошибка получения статуса агентов");
+                return StatusCode(500, new { success = false, message = "Внутренняя ошибка сервера" });
             }
         }
 
-        [HttpGet("stats")]
-        public async Task<IActionResult> GetServerStats()
+        /// <summary>
+        /// Отключение всех агентов
+        /// </summary>
+        [HttpPost("disconnect-all")]
+        public async Task<IActionResult> DisconnectAllAgents()
         {
             try
             {
-                var stats = _taskManager.GetServerStats();
-                return Ok(stats);
+                var agents = await _agentManager.GetAllAgentsAsync();
+                var disconnectedCount = 0;
+
+                foreach (var agent in agents.Where(a => a.IsOnline))
+                {
+                    await _agentManager.DisconnectAgentAsync(agent.Id);
+                    disconnectedCount++;
+                }
+
+                return Ok(new
+                {
+                    success = true,
+                    message = $"Отключено {disconnectedCount} агентов",
+                    disconnectedCount = disconnectedCount
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при получении статистики сервера");
-                return BadRequest(new { Success = false, Message = ex.Message });
+                _logger.LogError(ex, "Ошибка отключения агентов");
+                return StatusCode(500, new { success = false, message = "Внутренняя ошибка сервера" });
+            }
+        }
+
+        /// <summary>
+        /// Получение списка всех агентов
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetAllAgents()
+        {
+            try
+            {
+                var agents = await _agentManager.GetAllAgentsAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    agents = agents.Select(a => new
+                    {
+                        id = a.Id,
+                        name = a.Name,
+                        isOnline = a.IsOnline,
+                        lastSeen = a.LastSeen,
+                        processedBlocks = a.ProcessedBlocks,
+                        currentTask = a.CurrentTask,
+                        performance = a.Performance
+                    })
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка получения списка агентов");
+                return StatusCode(500, new { success = false, message = "Внутренняя ошибка сервера" });
+            }
+        }
+
+        /// <summary>
+        /// Получение информации об агенте по ID
+        /// </summary>
+        [HttpGet("{agentId}")]
+        public async Task<IActionResult> GetAgent(string agentId)
+        {
+            try
+            {
+                var agent = await _agentManager.GetAgentAsync(agentId);
+                
+                if (agent == null)
+                {
+                    return NotFound(new { success = false, message = "Агент не найден" });
+                }
+
+                return Ok(new
+                {
+                    success = true,
+                    agent = new
+                    {
+                        id = agent.Id,
+                        name = agent.Name,
+                        isOnline = agent.IsOnline,
+                        lastSeen = agent.LastSeen,
+                        processedBlocks = agent.ProcessedBlocks,
+                        currentTask = agent.CurrentTask,
+                        performance = agent.Performance
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка получения информации об агенте {AgentId}", agentId);
+                return StatusCode(500, new { success = false, message = "Внутренняя ошибка сервера" });
+            }
+        }
+
+        /// <summary>
+        /// Отключение конкретного агента
+        /// </summary>
+        [HttpPost("{agentId}/disconnect")]
+        public async Task<IActionResult> DisconnectAgent(string agentId)
+        {
+            try
+            {
+                var agent = await _agentManager.GetAgentAsync(agentId);
+                
+                if (agent == null)
+                {
+                    return NotFound(new { success = false, message = "Агент не найден" });
+                }
+
+                await _agentManager.DisconnectAgentAsync(agentId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = $"Агент {agent.Name} отключен"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка отключения агента {AgentId}", agentId);
+                return StatusCode(500, new { success = false, message = "Внутренняя ошибка сервера" });
+            }
+        }
+
+        /// <summary>
+        /// Получение статистики агентов
+        /// </summary>
+        [HttpGet("stats")]
+        public async Task<IActionResult> GetAgentsStats()
+        {
+            try
+            {
+                var agents = await _agentManager.GetAllAgentsAsync();
+                var onlineAgents = agents.Where(a => a.IsOnline).ToList();
+
+                var stats = new
+                {
+                    totalAgents = agents.Count,
+                    onlineAgents = onlineAgents.Count,
+                    offlineAgents = agents.Count - onlineAgents.Count,
+                    totalProcessedBlocks = agents.Sum(a => a.ProcessedBlocks),
+                    averagePerformance = onlineAgents.Any() ? onlineAgents.Average(a => a.Performance) : 0,
+                    topPerformers = onlineAgents
+                        .OrderByDescending(a => a.Performance)
+                        .Take(5)
+                        .Select(a => new { name = a.Name, performance = a.Performance })
+                };
+
+                return Ok(new { success = true, stats = stats });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка получения статистики агентов");
+                return StatusCode(500, new { success = false, message = "Внутренняя ошибка сервера" });
             }
         }
 

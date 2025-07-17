@@ -1,0 +1,1065 @@
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Мониторинг задач";
+    ViewData["CacheControl"] = "no-cache, no-store, must-revalidate";
+    ViewData["Pragma"] = "no-cache";
+    ViewData["Expires"] = "0";
+}
+
+@section Styles {
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css?v=@DateTime.Now.Ticks" />
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .main-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            margin: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        
+        .page-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .page-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .page-subtitle {
+            color: #7f8c8d;
+            font-size: 1.1rem;
+        }
+        
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            font-weight: 500;
+        }
+        
+        .control-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e9ecef;
+        }
+        
+        .control-panel h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-weight: 600;
+            font-size: 1.2rem;
+        }
+        
+        .control-buttons {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-modern {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            border: none;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.85rem;
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        .btn-modern:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn-start { background: linear-gradient(135deg, #28a745, #20c997); color: white; }
+        .btn-stop { background: linear-gradient(135deg, #dc3545, #c82333); color: white; }
+        .btn-refresh { background: linear-gradient(135deg, #6c757d, #5a6268); color: white; }
+        .btn-new { background: linear-gradient(135deg, #007bff, #0056b3); color: white; }
+        
+        .threads-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .threads-control input {
+            border-radius: 6px;
+            border: 2px solid #e9ecef;
+            padding: 6px 10px;
+            font-weight: 600;
+            width: 80px;
+        }
+        
+        .monitoring-content {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+        
+        .tasks-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e9ecef;
+        }
+        
+        .tasks-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f8f9fa;
+        }
+        
+        .tasks-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .task-count-badge {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+        
+        .tasks-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .tasks-table table {
+            margin: 0;
+            font-size: 0.9rem;
+            width: 100%;
+        }
+        
+        .tasks-table th {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            color: #495057;
+            font-weight: 600;
+            padding: 12px;
+            border: none;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .tasks-table td {
+            padding: 12px;
+            border-bottom: 1px solid #f8f9fa;
+            vertical-align: middle;
+        }
+        
+        .task-name {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .task-address {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            color: #6c757d;
+            word-break: break-all;
+        }
+        
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-running { background: #d4edda; color: #155724; }
+        .status-pending { background: #fff3cd; color: #856404; }
+        .status-completed { background: #d1ecf1; color: #0c5460; }
+        .status-stopped { background: #f8d7da; color: #721c24; }
+        .status-error { background: #f8d7da; color: #721c24; }
+        
+        .progress-modern {
+            background: #f8f9fa;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .progress-bar-modern {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.3s ease;
+            position: relative;
+        }
+        
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+        
+        .btn-view {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-view:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(0, 123, 255, 0.3);
+        }
+        
+        .live-log-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e9ecef;
+        }
+        
+        .live-log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f8f9fa;
+        }
+        
+        .live-log-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .live-log-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .btn-control {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-play { background: #28a745; color: white; }
+        .btn-pause { background: #ffc107; color: #212529; }
+        .btn-clear { background: #6c757d; color: white; }
+        
+        .phrase-log-modern {
+            background: #1e1e1e;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            padding: 15px;
+            border-radius: 8px;
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid #333;
+        }
+        
+        .log-time {
+            color: #888;
+            margin-right: 8px;
+        }
+        
+        .log-status {
+            margin-right: 8px;
+            font-weight: bold;
+        }
+        
+        .log-status.checked {
+            color: #00ff00;
+        }
+        
+        .log-status.found {
+            color: #ff6b6b;
+            animation: pulse 1s infinite;
+        }
+        
+        .log-phrase {
+            color: #4ecdc4;
+            margin-right: 8px;
+        }
+        
+        .log-address {
+            color: #ffe66d;
+            font-size: 0.8rem;
+        }
+        
+        @@keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        @@keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @@keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        @@media (max-width: 768px) {
+            .main-container {
+                margin: 10px;
+                padding: 15px;
+            }
+            
+            .page-title {
+                font-size: 2rem;
+            }
+            
+            .stats-row {
+                flex-direction: column;
+            }
+            
+            .control-buttons {
+                flex-direction: column;
+            }
+            
+            .phrase-log-modern {
+                height: 300px;
+            }
+        }
+    </style>
+}
+
+<div class="main-container">
+    <!-- Заголовок страницы -->
+    <div class="page-header">
+        <h1 class="page-title">
+            <i class="fas fa-chart-line"></i> Мониторинг задач
+        </h1>
+        <p class="page-subtitle">Управление и отслеживание выполнения задач поиска Bitcoin адресов</p>
+    </div>
+
+    <!-- Информация о мониторинге -->
+    <div class="monitoring-info">
+        <h4><i class="fas fa-info-circle"></i> Информация о мониторинге</h4>
+        <p><strong>Автообновление:</strong> Данные обновляются каждые 30 секунд</p>
+        <p><strong>Live-лог:</strong> Обновляется каждую секунду для выбранной задачи</p>
+        <p><strong>Статус:</strong> Отслеживание состояния всех активных задач</p>
+    </div>
+
+    <!-- Статистика системы -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="fas fa-tasks"></i>
+            </div>
+            <div class="stat-value" id="totalTasks">0</div>
+            <div class="stat-label">Всего задач</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="fas fa-play-circle"></i>
+            </div>
+            <div class="stat-value" id="runningTasks">0</div>
+            <div class="stat-label">Выполняется</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="stat-value" id="completedTasks">0</div>
+            <div class="stat-label">Завершено</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="fas fa-pause-circle"></i>
+            </div>
+            <div class="stat-value" id="pausedTasks">0</div>
+            <div class="stat-label">Приостановлено</div>
+        </div>
+    </div>
+
+    <!-- Панель управления -->
+    <div class="control-panel">
+        <h3><i class="fas fa-server"></i> Управление сервером</h3>
+        <div class="control-buttons">
+            <button id="startServerBtn" class="btn-modern btn-start">
+                <i class="fas fa-play"></i> Запустить сервер
+            </button>
+            <button id="stopServerBtn" class="btn-modern btn-stop">
+                <i class="fas fa-stop"></i> Остановить сервер
+            </button>
+            <button id="refreshBtn" class="btn-modern btn-refresh">
+                <i class="fas fa-sync"></i> Обновить данные
+            </button>
+            <button class="btn-modern btn-new" onclick="showCreateTaskModal()">
+                <i class="fas fa-plus"></i> Новая задача
+            </button>
+        </div>
+        <div class="threads-control">
+            <label for="threadsInput" style="font-weight: 600; color: #495057;">Количество потоков:</label>
+            <input type="number" id="threadsInput" value="4" min="1" max="16">
+            <button id="setThreadsBtn" class="btn-modern btn-start" style="padding: 8px 16px; flex: none;">
+                <i class="fas fa-cog"></i> Установить
+            </button>
+        </div>
+    </div>
+
+    <!-- Основной контент мониторинга -->
+    <div class="monitoring-content">
+        <!-- Контейнер задач -->
+        <div class="tasks-container">
+            <div class="tasks-header">
+                <h3 class="tasks-title">
+                    <i class="fas fa-list"></i> Активные задачи
+                </h3>
+                <div class="task-count-badge" id="taskCount">0</div>
+            </div>
+            
+            <div id="tasksContainer">
+                <div class="loading-spinner">
+                    <div class="spinner-modern"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Живой лог фраз -->
+        <div class="live-log-container">
+            <div class="live-log-header">
+                <h3 class="live-log-title">
+                    <i class="fas fa-terminal"></i> Лайв-лог фраз
+                </h3>
+                <div class="live-log-controls">
+                    <button id="playLogBtn" class="btn-control btn-play">
+                        <i class="fas fa-play"></i> Включить
+                    </button>
+                    <button id="pauseLogBtn" class="btn-control btn-pause" style="display: none;">
+                        <i class="fas fa-pause"></i> Пауза
+                    </button>
+                    <button id="clearLogBtn" class="btn-control btn-clear">
+                        <i class="fas fa-trash"></i> Очистить
+                    </button>
+                </div>
+            </div>
+            
+            <div id="taskPhraseLog" class="phrase-log-modern">
+                <p style="color: #95a5a6; margin: 0;">Выберите задачу для просмотра лога...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно создания задачи -->
+<div class="modal fade" id="createTaskModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus"></i> Создать новую задачу</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createTaskForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="taskName" class="form-label">Название задачи</label>
+                                <input type="text" class="form-control" id="taskName" name="taskName" value="SeedSearch" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="targetAddress" class="form-label">Целевой адрес</label>
+                                <input type="text" class="form-control" id="targetAddress" name="targetAddress" placeholder="1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="wordCount" class="form-label">Количество слов</label>
+                                <input type="number" class="form-control" id="wordCount" name="wordCount" value="12" min="1" max="24">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="threads" class="form-label">Количество потоков</label>
+                                <input type="number" class="form-control" id="threads" name="threads" value="4" min="1" max="16">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="maxAttempts" class="form-label">Максимум попыток</label>
+                                <input type="number" class="form-control" id="maxAttempts" name="maxAttempts" value="1000000" min="1000">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="knownWords" class="form-label">Известные слова (через пробел)</label>
+                        <input type="text" class="form-control" id="knownWords" name="knownWords" placeholder="abandon ability able">
+                        <div class="form-text">Оставьте пустым для полного перебора</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="createTaskFromModal()">
+                    <i class="fas fa-plus"></i> Создать и запустить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedTaskId = null;
+let refreshInterval = null;
+let taskLiveLogInterval = null;
+let isLiveLogActive = false;
+let lastLogUpdate = 0;
+
+// Инициализация
+document.addEventListener('DOMContentLoaded', function() {
+    loadTasks();
+    loadSystemStatus();
+    setupEventListeners();
+    startAutoRefresh();
+    
+    // Проверяем, есть ли taskId в URL для автоматического выделения
+    const urlParams = new URLSearchParams(window.location.search);
+    const taskId = urlParams.get('taskId');
+    if (taskId) {
+        // Ждем загрузки задач и затем выделяем нужную
+        setTimeout(() => {
+            selectTask(taskId);
+        }, 1000);
+    }
+});
+
+function setupEventListeners() {
+    document.getElementById('startServerBtn').addEventListener('click', startServer);
+    document.getElementById('stopServerBtn').addEventListener('click', stopServer);
+    document.getElementById('setThreadsBtn').addEventListener('click', setThreads);
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+        loadTasks();
+        loadSystemStatus();
+    });
+    
+    // Управление лайв-логом
+    document.getElementById('playLogBtn').addEventListener('click', startLiveLog);
+    document.getElementById('pauseLogBtn').addEventListener('click', pauseLiveLog);
+    document.getElementById('clearLogBtn').addEventListener('click', clearLiveLog);
+}
+
+function startAutoRefresh() {
+    // Обновляем каждые 30 секунд
+    refreshInterval = setInterval(() => {
+        loadTasks();
+        loadSystemStatus();
+    }, 30000);
+}
+
+function loadSystemStatus() {
+    fetch('/api/task/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('totalTasks').textContent = data.totalTasks;
+                document.getElementById('runningTasks').textContent = data.runningTasks;
+                document.getElementById('completedTasks').textContent = data.completedTasks;
+                document.getElementById('pausedTasks').textContent = data.pausedTasks;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading system status:', error);
+        });
+}
+
+function loadTasks() {
+    fetch('/api/task/list')
+        .then(response => response.json())
+        .then(tasks => {
+            console.log('Loaded tasks:', tasks);
+            displayTasks(tasks);
+        })
+        .catch(error => {
+            console.error('Error loading tasks:', error);
+            document.getElementById('tasksContainer').innerHTML = 
+                '<div class="alert alert-danger">Ошибка загрузки задач</div>';
+        });
+}
+
+function displayTasks(tasks) {
+    const container = document.getElementById('tasksContainer');
+    const taskCount = document.getElementById('taskCount');
+    
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <i class="fas fa-tasks"></i>
+                </div>
+                <div class="empty-text">Нет активных задач</div>
+                <p style="margin-top: 10px; opacity: 0.7;">Создайте новую задачу для начала поиска</p>
+            </div>`;
+        taskCount.textContent = '0';
+        return;
+    }
+    
+    taskCount.textContent = tasks.length;
+    
+    let html = '<div class="tasks-table"><table class="table">';
+    html += '<thead><tr><th>Название</th><th>Статус</th><th>Целевой адрес</th><th>Прогресс</th><th>Действия</th></tr></thead><tbody>';
+    
+    tasks.forEach(task => {
+        const progress = task.totalCombinations > 0 ? 
+            Math.round((task.processedCombinations / task.totalCombinations) * 100) : 0;
+        const statusClass = getStatusClass(task.status);
+        const statusText = getStatusText(task.status);
+        const isSelected = selectedTaskId === task.id ? 'selected-task' : '';
+        
+        html += `<tr class="${isSelected}">
+            <td><div class="task-name">${task.name || 'Без названия'}</div></td>
+            <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+            <td><div class="task-address">${task.targetAddress || 'Не указан'}</div></td>
+            <td>
+                <div class="progress-modern">
+                    <div class="progress-bar-modern" style="width: ${progress}%">
+                        <span class="progress-text">${progress}%</span>
+                    </div>
+                </div>
+                <small style="color: #6c757d; margin-top: 5px; display: block;">
+                    ${(task.processedCombinations || 0).toLocaleString()} / ${(task.totalCombinations || 0).toLocaleString()}
+                </small>
+            </td>
+            <td>
+                <button class="btn-view" onclick="selectTask('${task.id}')">
+                    <i class="fas fa-eye"></i> Просмотр
+                </button>
+            </td>
+        </tr>`;
+    });
+    
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+function getStatusClass(status) {
+    switch(status?.toLowerCase()) {
+        case 'running': return 'status-running';
+        case 'pending': return 'status-pending';
+        case 'completed': return 'status-completed';
+        case 'stopped': return 'status-stopped';
+        case 'error': return 'status-error';
+        default: return 'status-stopped';
+    }
+}
+
+function getStatusText(status) {
+    switch(status?.toLowerCase()) {
+        case 'running': return 'Выполняется';
+        case 'paused': return 'Приостановлена';
+        case 'completed': return 'Завершена';
+        case 'stopped': return 'Остановлена';
+        case 'error': return 'Ошибка';
+        default: return status || 'Неизвестно';
+    }
+}
+
+function selectTask(taskId) {
+    selectedTaskId = taskId;
+    
+    // Подсвечиваем выбранную задачу в таблице
+    const rows = document.querySelectorAll('.tasks-table tbody tr');
+    rows.forEach(row => {
+        row.classList.remove('selected-task');
+    });
+    
+    // Находим и подсвечиваем выбранную строку
+    const selectedRow = document.querySelector(`[onclick="selectTask('${taskId}')"]`).closest('tr');
+    if (selectedRow) {
+        selectedRow.classList.add('selected-task');
+    }
+    
+    // Запускаем лайв-лог для выбранной задачи
+    startLiveLog();
+}
+
+function startLiveLog() {
+    if (!selectedTaskId) {
+        document.getElementById('taskPhraseLog').innerHTML = '<p style="color: #95a5a6; margin: 0;">Выберите задачу для просмотра лога...</p>';
+        return;
+    }
+    
+    isLiveLogActive = true;
+    document.getElementById('playLogBtn').style.display = 'none';
+    document.getElementById('pauseLogBtn').style.display = 'inline-block';
+    
+    // Останавливаем предыдущий интервал
+    if (taskLiveLogInterval) {
+        clearInterval(taskLiveLogInterval);
+    }
+    
+    // Запускаем обновление каждую секунду для более быстрого отклика
+    taskLiveLogInterval = setInterval(() => {
+        if (isLiveLogActive) {
+            updateTaskLiveLog(selectedTaskId);
+        }
+    }, 1000);
+    
+    // Сразу обновляем один раз
+    updateTaskLiveLog(selectedTaskId);
+}
+
+function pauseLiveLog() {
+    isLiveLogActive = false;
+    document.getElementById('playLogBtn').style.display = 'inline-block';
+    document.getElementById('pauseLogBtn').style.display = 'none';
+    
+    if (taskLiveLogInterval) {
+        clearInterval(taskLiveLogInterval);
+    }
+}
+
+function clearLiveLog() {
+    document.getElementById('taskPhraseLog').innerHTML = '<p style="color: #95a5a6; margin: 0;">Лог очищен...</p>';
+    lastLogUpdate = 0;
+}
+
+function updateTaskLiveLog(taskId) {
+    const now = Date.now();
+    if (now - lastLogUpdate < 500) return; // Ограничиваем частоту обновлений
+    
+    fetch('/api/task/live-log')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.phrases && Array.isArray(data.phrases)) {
+                // Фильтруем фразы только для текущей задачи
+                const taskPhrases = data.phrases.filter(item => 
+                    item.taskId === taskId && 
+                    (item.status === 'checked' || item.status === 'found')
+                );
+                
+                const container = document.getElementById('taskPhraseLog');
+                
+                if (taskPhrases.length > 0) {
+                    // Показываем последние 30 фраз для более подробного лога
+                    const recentPhrases = taskPhrases.slice(-30);
+                    let html = '';
+                    
+                    recentPhrases.forEach(item => {
+                        const time = new Date(item.timestamp).toLocaleTimeString();
+                        const statusIcon = item.status === 'found' ? '🎯' : '✓';
+                        const statusClass = item.status === 'found' ? 'found' : 'checked';
+                        
+                        html += `<div class="log-entry">
+                            <span class="log-time">[${time}]</span> 
+                            <span class="log-status ${statusClass}">${statusIcon}</span>
+                            <span style="color: #3498db;">#${item.entryIndex || item.index}</span>
+                            <span class="log-phrase">${item.phrase}</span>
+                            ${item.address ? `<span class="log-address">${item.address}</span>` : ''}
+                        </div>`;
+                    });
+                    
+                    container.innerHTML = html;
+                    container.scrollTop = container.scrollHeight;
+                } else {
+                    container.innerHTML = '<p style="color: #95a5a6; margin: 0;">Ожидание обработанных фраз...</p>';
+                }
+                
+                lastLogUpdate = now;
+            }
+        })
+        .catch(error => {
+            console.error('Error updating task live log:', error);
+        });
+}
+
+function startServer() {
+    fetch('/api/task/start', { method: 'POST' })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Сервер запущен', 'success');
+                loadTasks();
+            } else {
+                showAlert('Ошибка запуска сервера: ' + result.message, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error starting server:', error);
+            showAlert('Ошибка запуска сервера', 'danger');
+        });
+}
+
+function stopServer() {
+    fetch('/api/task/stop', { method: 'POST' })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Сервер остановлен', 'success');
+                loadTasks();
+            } else {
+                showAlert('Ошибка остановки сервера: ' + result.message, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error stopping server:', error);
+            showAlert('Ошибка остановки сервера', 'danger');
+        });
+}
+
+function setThreads() {
+    const threads = document.getElementById('threadsInput').value;
+    fetch(`/api/task/set-threads?threads=${threads}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                showAlert(`Количество потоков установлено: ${threads}`, 'success');
+            } else {
+                showAlert('Ошибка установки потоков: ' + result.message, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error setting threads:', error);
+            showAlert('Ошибка установки потоков', 'danger');
+        });
+}
+
+function showCreateTaskModal() {
+    // Проверяем, загружен ли Bootstrap
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        const modal = new bootstrap.Modal(document.getElementById('createTaskModal'));
+        modal.show();
+    } else {
+        // Fallback - показываем модальное окно без Bootstrap
+        const modal = document.getElementById('createTaskModal');
+        modal.style.display = 'block';
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        
+        // Добавляем backdrop
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        backdrop.id = 'modalBackdrop';
+        document.body.appendChild(backdrop);
+    }
+}
+
+function closeCreateTaskModal() {
+    // Проверяем, загружен ли Bootstrap
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('createTaskModal'));
+        if (modal) {
+            modal.hide();
+        }
+    } else {
+        // Fallback - скрываем модальное окно без Bootstrap
+        const modal = document.getElementById('createTaskModal');
+        modal.style.display = 'none';
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        
+        // Удаляем backdrop
+        const backdrop = document.getElementById('modalBackdrop');
+        if (backdrop) {
+            backdrop.remove();
+        }
+    }
+}
+
+function createTaskFromModal() {
+    const form = document.getElementById('createTaskForm');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+    
+    // Создаем задачу
+    fetch('/api/task/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            Name: data.taskName,
+            TargetAddress: data.targetAddress,
+            KnownWords: data.knownWords || '',
+            WordCount: Number(data.wordCount),
+            Language: 'english',
+            StartIndex: 0,
+            EndIndex: 0,
+            BatchSize: Number(data.maxAttempts),
+            BlockSize: 100000,
+            Threads: Number(data.threads)
+        })
+    })
+    .then(async response => {
+        const text = await response.text();
+        let result = {};
+        try {
+            result = text ? JSON.parse(text) : {};
+        } catch (e) {
+            showAlert('Ошибка парсинга JSON: ' + e.message, 'danger');
+            return;
+        }
+        
+        if (result.Success || result.success) {
+            const taskId = result.TaskId || result.taskId;
+            showAlert(`Задача создана: ${taskId}`, 'success');
+            
+            // Автоматически запускаем задачу
+            fetch(`/api/task/task/${taskId}/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(async response => {
+                const startResult = await response.text();
+                try {
+                    const parsed = JSON.parse(startResult);
+                    if (parsed.Success || parsed.success) {
+                        showAlert('Задача запущена в фоновом режиме', 'success');
+                        // Закрываем модальное окно
+                        closeCreateTaskModal();
+                        // Обновляем список задач
+                        loadTasks();
+                        loadSystemStatus();
+                        // Автоматически выбираем новую задачу
+                        selectTask(taskId);
+                    } else {
+                        showAlert('Ошибка запуска задачи: ' + (parsed.Message || parsed.message), 'danger');
+                    }
+                } catch (e) {
+                    showAlert('Ошибка парсинга ответа запуска: ' + e.message, 'danger');
+                }
+            })
+            .catch(error => {
+                showAlert('Ошибка запуска задачи: ' + error.message, 'danger');
+            });
+        } else {
+            showAlert('Ошибка создания задачи: ' + (result.Message || result.message || 'Unknown error'), 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Ошибка создания задачи: ' + error.message, 'danger');
+    });
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert-modern alert-${type}`;
+    alertDiv.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>${message}</span>
+            <button type="button" onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: inherit; font-size: 1.2rem; cursor: pointer;">×</button>
+        </div>
+    `;
+    
+    const container = document.querySelector('.main-container');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    // Автоматически скрываем через 5 секунд
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
+// Очистка интервалов при уходе со страницы
+window.addEventListener('beforeunload', function() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+    if (taskLiveLogInterval) {
+        clearInterval(taskLiveLogInterval);
+    }
+});
+</script> 

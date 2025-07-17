@@ -9,6 +9,9 @@ namespace BitcoinFinderWebServer
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllersWithViews();
+            services.AddSingleton<BitcoinFinderWebServer.Services.SeedPhraseFinder>();
+            services.AddSingleton<BitcoinFinderWebServer.Services.TaskStorageService>();
+            services.AddSingleton<BitcoinFinderWebServer.Services.TaskManager>();
         }
 
         public void Configure(IApplicationBuilder app, IHostEnvironment env)

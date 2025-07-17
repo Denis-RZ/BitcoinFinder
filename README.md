@@ -1,6 +1,28 @@
-# BitcoinFinder Web Server
+# BitcoinFinder
 
-Веб-сервер для распределенного поиска Bitcoin seed-фраз с поддержкой множественных агентов и автоматическим управлением пулом соединений.
+Комплексное решение для распределенного поиска Bitcoin seed-фраз с поддержкой множественных платформ и агентов.
+
+## Проекты в решении
+
+- **BitcoinFinder** - основное WinForms приложение (агент)
+- **BitcoinFinderWebServer** - веб-сервер для API
+- **BitcoinFinderAndroid** - Android приложение-сервер
+- **DistributedProtocolTests** - тесты для распределенного протокола
+
+## Архитектура
+
+```
+WinForms Agent ←→ Android Server/Broker ←→ WinForms Agents
+     ↓                    ↓                    ↓
+  Поиск seed     Координация задач      Поиск seed
+```
+
+### Компоненты
+
+1. **Android Server** - центральный координатор на мобильном устройстве
+2. **WinForms Agents** - агенты на Windows для выполнения поиска
+3. **HTTP API** - REST API для связи агентов с сервером
+4. **TCP Server** - прямая связь для быстрой передачи данных
 
 ## Особенности
 

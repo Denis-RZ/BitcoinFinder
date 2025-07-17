@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="BitcoinFinderAndroidNew.StolenWalletRecoveryPage"
+             BackgroundColor="#F5F5F5">
+
+    <ScrollView>
+        <Grid Padding="16" RowSpacing="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Frame Grid.Row="0" 
+                   BackgroundColor="#D32F2F" 
+                   CornerRadius="12" 
+                   Padding="20"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="🔍 Восстановление похищенного кошелька"
+                          FontSize="28"
+                          FontAttributes="Bold"
+                          TextColor="White"
+                          HorizontalOptions="Center"/>
+                    <Label Text="Поиск приватного ключа для восстановления доступа"
+                          FontSize="14"
+                          TextColor="#FFCDD2"
+                          HorizontalOptions="Center"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Информация о похищении -->
+            <Frame Grid.Row="1" 
+                   BackgroundColor="#FFF3E0" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="⚠️ Важная информация" 
+                          FontSize="18" 
+                          FontAttributes="Bold"
+                          TextColor="#E65100"/>
+                    
+                    <Label Text="• Кошелек был похищен 7 лет назад" 
+                          FontSize="14" 
+                          TextColor="#BF360C"/>
+                    <Label Text="• Сид фразы нет, только приватный ключ" 
+                          FontSize="14" 
+                          TextColor="#BF360C"/>
+                    <Label Text="• Поиск оптимизирован под 2017 год" 
+                          FontSize="14" 
+                          TextColor="#BF360C"/>
+                    <Label Text="• Проверяем популярные пароли и фразы" 
+                          FontSize="14" 
+                          TextColor="#BF360C"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Ввод Bitcoin адреса -->
+            <Frame Grid.Row="2" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="🎯 Bitcoin адрес для восстановления" 
+                          FontSize="18" 
+                          FontAttributes="Bold"
+                          TextColor="#1976D2"/>
+                    
+                    <Frame BackgroundColor="#F8F9FA" CornerRadius="8" Padding="8">
+                        <Entry x:Name="TargetAddressEntry" 
+                               Placeholder="Введите Bitcoin адрес похищенного кошелька"
+                               FontSize="14"
+                               Text=""
+                               MaxLength="100"/>
+                    </Frame>
+                    
+                    <Label Text="💡 Введите точный Bitcoin адрес, который был похищен"
+                          FontSize="12" 
+                          TextColor="#666"
+                          HorizontalOptions="Center"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Стратегии поиска -->
+            <Frame Grid.Row="3" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="🧠 Стратегии поиска (2017 год)" 
+                          FontSize="18" 
+                          FontAttributes="Bold"
+                          TextColor="#1976D2"/>
+                    
+                    <Grid ColumnSpacing="8" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <Frame Grid.Row="0" Grid.Column="0" BackgroundColor="#E3F2FD" CornerRadius="8" Padding="8">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="📚 Популярные пароли" FontSize="12" FontAttributes="Bold" TextColor="#1976D2"/>
+                                <Label Text="bitcoin, wallet, crypto..." FontSize="10" TextColor="#1976D2"/>
+                            </VerticalStackLayout>
+                        </Frame>
+                        
+                        <Frame Grid.Row="0" Grid.Column="1" BackgroundColor="#E3F2FD" CornerRadius="8" Padding="8">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="🧠 Brain wallet фразы" FontSize="12" FontAttributes="Bold" TextColor="#1976D2"/>
+                                <Label Text="hodl, to the moon..." FontSize="10" TextColor="#1976D2"/>
+                            </VerticalStackLayout>
+                        </Frame>
+                        
+                        <Frame Grid.Row="1" Grid.Column="0" BackgroundColor="#E3F2FD" CornerRadius="8" Padding="8">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="🔢 Простые числа" FontSize="12" FontAttributes="Bold" TextColor="#1976D2"/>
+                                <Label Text="123, 2017, 1000..." FontSize="10" TextColor="#1976D2"/>
+                            </VerticalStackLayout>
+                        </Frame>
+                        
+                        <Frame Grid.Row="1" Grid.Column="1" BackgroundColor="#E3F2FD" CornerRadius="8" Padding="8">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="📅 Даты 2017 года" FontSize="12" FontAttributes="Bold" TextColor="#1976D2"/>
+                                <Label Text="01.01.2017 - 31.12.2017" FontSize="10" TextColor="#1976D2"/>
+                            </VerticalStackLayout>
+                        </Frame>
+                        
+                        <Frame Grid.Row="2" Grid.Column="0" BackgroundColor="#E3F2FD" CornerRadius="8" Padding="8">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="🎲 Случайные ключи" FontSize="12" FontAttributes="Bold" TextColor="#1976D2"/>
+                                <Label Text="1,000,000 попыток" FontSize="10" TextColor="#1976D2"/>
+                            </VerticalStackLayout>
+                        </Frame>
+                        
+                        <Frame Grid.Row="2" Grid.Column="1" BackgroundColor="#4CAF50" CornerRadius="8" Padding="8">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="🚀 ВСЕ СТРАТЕГИИ" FontSize="12" FontAttributes="Bold" TextColor="White"/>
+                                <Label Text="Рекомендуется" FontSize="10" TextColor="White"/>
+                            </VerticalStackLayout>
+                        </Frame>
+                    </Grid>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Кнопки управления -->
+            <Frame Grid.Row="4" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <Button x:Name="StartRecoveryButton" 
+                            Grid.Column="0"
+                            Text="🚀 Начать восстановление" 
+                            Clicked="OnStartRecoveryClicked"
+                            BackgroundColor="#4CAF50"
+                            TextColor="White"
+                            CornerRadius="8"
+                            FontAttributes="Bold"
+                            FontSize="16"/>
+                    
+                    <Button x:Name="StopRecoveryButton" 
+                            Grid.Column="1"
+                            Text="⏹️ Остановить" 
+                            Clicked="OnStopRecoveryClicked"
+                            BackgroundColor="#F44336"
+                            TextColor="White"
+                            CornerRadius="8"
+                            FontAttributes="Bold"
+                            FontSize="16"
+                            IsEnabled="False"/>
+                </Grid>
+            </Frame>
+
+            <!-- Прогресс восстановления -->
+            <Frame Grid.Row="5" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="📊 Прогресс восстановления" 
+                          FontSize="18" 
+                          FontAttributes="Bold"
+                          TextColor="#1976D2"/>
+                    
+                    <ProgressBar x:Name="RecoveryProgressBar" 
+                                Progress="0" 
+                                ProgressColor="#4CAF50"
+                                BackgroundColor="#E0E0E0"
+                                HeightRequest="8"/>
+                    
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <VerticalStackLayout Grid.Column="0" Spacing="4">
+                            <Label x:Name="CurrentStrategyLabel" Text="🧠 Стратегия: -" FontSize="12" TextColor="#666"/>
+                            <Label x:Name="CurrentKeyLabel" Text="🔑 Текущий ключ: -" FontSize="12" TextColor="#666"/>
+                            <Label x:Name="ProcessedKeysLabel" Text="📈 Обработано: 0" FontSize="12" TextColor="#666"/>
+                        </VerticalStackLayout>
+                        
+                        <VerticalStackLayout Grid.Column="1" Spacing="4">
+                            <Label x:Name="SpeedLabel" Text="⚡ Скорость: 0 к/с" FontSize="12" TextColor="#666"/>
+                            <Label x:Name="ProgressLabel" Text="📊 Прогресс: 0%" FontSize="12" TextColor="#666"/>
+                            <Label x:Name="ElapsedTimeLabel" Text="⏱️ Время: 00:00:00" FontSize="12" TextColor="#666"/>
+                        </VerticalStackLayout>
+                    </Grid>
+                    
+                    <Frame BackgroundColor="#E3F2FD" CornerRadius="8" Padding="8">
+                        <Label x:Name="StatusLabel" Text="⏳ Статус: Ожидание ввода адреса" FontSize="14" FontAttributes="Bold" TextColor="#1976D2"/>
+                    </Frame>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Результат восстановления -->
+            <Frame Grid.Row="6" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label x:Name="ResultLabel" 
+                           Text="🎯 Результат восстановления" 
+                           FontSize="18" 
+                           FontAttributes="Bold"
+                           TextColor="#1976D2"/>
+                    
+                    <VerticalStackLayout x:Name="ResultDetails" 
+                                        IsVisible="False" 
+                                        Spacing="8"
+                                        BackgroundColor="#F1F8E9"
+                                        Padding="12">
+                        <Label x:Name="FoundKeyLabel" Text="" FontSize="14" FontAttributes="Bold" TextColor="#2E7D32"/>
+                        <Label x:Name="AddressLabel" Text="" FontSize="14" TextColor="#2E7D32"/>
+                        <Label x:Name="StrategyUsedLabel" Text="" FontSize="14" TextColor="#2E7D32"/>
+                        <Label x:Name="ProcessingTimeLabel" Text="" FontSize="14" TextColor="#2E7D32"/>
+                        
+                        <Button x:Name="CopyKeyButton"
+                                Text="📋 Скопировать приватный ключ"
+                                Clicked="OnCopyKeyClicked"
+                                BackgroundColor="#4CAF50"
+                                TextColor="White"
+                                CornerRadius="8"
+                                FontSize="14"
+                                Margin="0,8,0,0"/>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Лог операций -->
+            <Frame Grid.Row="7" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="📝 Лог восстановления" 
+                          FontSize="18" 
+                          FontAttributes="Bold"
+                          TextColor="#1976D2"/>
+                    
+                    <Frame BackgroundColor="#FAFAFA" 
+                           CornerRadius="8" 
+                           Padding="12"
+                           HeightRequest="200">
+                        <ScrollView>
+                            <Label x:Name="LogLabel" 
+                                   Text="🔍 Готов к восстановлению похищенного кошелька..." 
+                                   FontSize="11" 
+                                   FontFamily="Monospace"
+                                   TextColor="#424242"/>
+                        </ScrollView>
+                    </Frame>
+                </VerticalStackLayout>
+            </Frame>
+
+        </Grid>
+    </ScrollView>
+
+</ContentPage> 

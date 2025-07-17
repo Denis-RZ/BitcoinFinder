@@ -1,0 +1,355 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="BitcoinFinderAndroidNew.MainPage"
+             BackgroundColor="#F5F5F5">
+
+    <ScrollView>
+        <Grid Padding="16" RowSpacing="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Frame Grid.Row="0" 
+                   BackgroundColor="#2196F3" 
+                   CornerRadius="12" 
+                   Padding="20"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="🔍 Bitcoin Key Finder"
+                          FontSize="28"
+                          FontAttributes="Bold"
+                          TextColor="White"
+                          HorizontalOptions="Center"/>
+                    <Label Text="Поиск приватного ключа по адресу"
+                          FontSize="14"
+                          TextColor="#E3F2FD"
+                          HorizontalOptions="Center"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Target Address Input -->
+            <Frame Grid.Row="1" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="🎯 Целевой адрес" 
+                          FontSize="18" 
+                          FontAttributes="Bold"
+                          TextColor="#1976D2"/>
+                    
+                    <Frame BackgroundColor="#F8F9FA" CornerRadius="8" Padding="8">
+                        <Entry x:Name="TargetAddressEntry" 
+                               Placeholder="Введите Bitcoin адрес (например: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa)"
+                               FontSize="14"
+                               Text=""
+                               MaxLength="100"/>
+                    </Frame>
+                    
+                    <Label Text="💡 Введите Bitcoin адрес, для которого нужно найти приватный ключ"
+                          FontSize="12" 
+                          TextColor="#666"
+                          HorizontalOptions="Center"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Quick Start Ranges -->
+            <Frame Grid.Row="2" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="🚀 Быстрый старт" 
+                          FontSize="18" 
+                          FontAttributes="Bold"
+                          TextColor="#1976D2"/>
+                    
+                    <Label Text="Выберите предустановленный диапазон для поиска:" 
+                          FontSize="14" 
+                          TextColor="#666"/>
+                    
+                    <Grid ColumnSpacing="8" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <Button Grid.Row="0" Grid.Column="0"
+                                Text="🔢 1-1M" 
+                                Clicked="OnQuickRangeClicked"
+                                CommandParameter="1-1000000"
+                                BackgroundColor="#E3F2FD"
+                                TextColor="#1976D2"
+                                CornerRadius="8"
+                                FontSize="12"/>
+                        
+                        <Button Grid.Row="0" Grid.Column="1"
+                                Text="🔢 1M-10M" 
+                                Clicked="OnQuickRangeClicked"
+                                CommandParameter="1000000-10000000"
+                                BackgroundColor="#E3F2FD"
+                                TextColor="#1976D2"
+                                CornerRadius="8"
+                                FontSize="12"/>
+                        
+                        <Button Grid.Row="1" Grid.Column="0"
+                                Text="🔢 10M-100M" 
+                                Clicked="OnQuickRangeClicked"
+                                CommandParameter="10000000-100000000"
+                                BackgroundColor="#E3F2FD"
+                                TextColor="#1976D2"
+                                CornerRadius="8"
+                                FontSize="12"/>
+                        
+                        <Button Grid.Row="1" Grid.Column="1"
+                                Text="🔢 100M-1B" 
+                                Clicked="OnQuickRangeClicked"
+                                CommandParameter="100000000-1000000000"
+                                BackgroundColor="#E3F2FD"
+                                TextColor="#1976D2"
+                                CornerRadius="8"
+                                FontSize="12"/>
+                    </Grid>
+                    
+                    <Label Text="💡 Эти диапазоны покрывают наиболее вероятные места для поиска"
+                          FontSize="11" 
+                          TextColor="#999"
+                          HorizontalOptions="Center"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Search Configuration -->
+            <Frame Grid.Row="3" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="⚙️ Настройки поиска" 
+                          FontSize="18" 
+                          FontAttributes="Bold"
+                          TextColor="#1976D2"/>
+                    
+                    <!-- Search Range -->
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="🔢 Диапазон поиска:" FontSize="14" FontAttributes="Bold"/>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Frame Grid.Column="0" BackgroundColor="#F8F9FA" CornerRadius="8" Padding="8">
+                                <Entry x:Name="StartIndexEntry" 
+                                       Placeholder="Начальный индекс"
+                                       Keyboard="Numeric"
+                                       FontSize="14"
+                                       Text="0"/>
+                            </Frame>
+                            <Frame Grid.Column="1" BackgroundColor="#F8F9FA" CornerRadius="8" Padding="8">
+                                <Entry x:Name="EndIndexEntry" 
+                                       Placeholder="Конечный индекс"
+                                       Keyboard="Numeric"
+                                       FontSize="14"
+                                       Text="1000000"/>
+                            </Frame>
+                        </Grid>
+                    </VerticalStackLayout>
+
+                    <!-- Format and Network -->
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <VerticalStackLayout Grid.Column="0" Spacing="6">
+                            <Label Text="🔧 Формат ключей:" FontSize="14" FontAttributes="Bold"/>
+                            <Frame BackgroundColor="#F8F9FA" CornerRadius="8" Padding="8">
+                                <Picker x:Name="FormatPicker" Title="Формат">
+                                    <Picker.Items>
+                                        <x:String>Decimal (1, 2, 3...)</x:String>
+                                        <x:String>Hex (0x1, 0x2, 0x3...)</x:String>
+                                    </Picker.Items>
+                                </Picker>
+                            </Frame>
+                        </VerticalStackLayout>
+                        
+                        <VerticalStackLayout Grid.Column="1" Spacing="6">
+                            <Label Text="🌐 Сеть:" FontSize="14" FontAttributes="Bold"/>
+                            <Frame BackgroundColor="#F8F9FA" CornerRadius="8" Padding="8">
+                                <Picker x:Name="NetworkPicker" Title="Сеть">
+                                    <Picker.Items>
+                                        <x:String>Bitcoin Mainnet</x:String>
+                                        <x:String>Bitcoin Testnet</x:String>
+                                    </Picker.Items>
+                                </Picker>
+                            </Frame>
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <!-- Thread Count -->
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="⚡ Потоки:" FontSize="14" FontAttributes="Bold"/>
+                        <Frame BackgroundColor="#F8F9FA" CornerRadius="8" Padding="8">
+                            <Entry x:Name="ThreadCountEntry" 
+                                   Placeholder="4" 
+                                   Keyboard="Numeric" 
+                                   Text="4"
+                                   FontSize="14"/>
+                        </Frame>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Control Buttons -->
+            <Frame Grid.Row="4" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <Button x:Name="StartButton" 
+                            Grid.Column="0"
+                            Text="▶️ Начать поиск" 
+                            SemanticProperties.Hint="Начинает поиск приватного ключа"
+                            Clicked="OnStartClicked"
+                            BackgroundColor="#4CAF50"
+                            TextColor="White"
+                            CornerRadius="8"
+                            FontAttributes="Bold"
+                            FontSize="16"/>
+                    
+                    <Button x:Name="StopButton" 
+                            Grid.Column="1"
+                            Text="⏹️ Остановить" 
+                            SemanticProperties.Hint="Останавливает поиск"
+                            Clicked="OnStopClicked"
+                            BackgroundColor="#F44336"
+                            TextColor="White"
+                            CornerRadius="8"
+                            FontAttributes="Bold"
+                            FontSize="16"
+                            IsEnabled="False"/>
+                </Grid>
+            </Frame>
+
+            <!-- Progress Information -->
+            <Frame Grid.Row="5" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="📊 Прогресс поиска" 
+                          FontSize="18" 
+                          FontAttributes="Bold"
+                          TextColor="#1976D2"/>
+                    
+                    <ProgressBar x:Name="ProgressBar" 
+                                Progress="0" 
+                                ProgressColor="#4CAF50"
+                                BackgroundColor="#E0E0E0"
+                                HeightRequest="8"/>
+                    
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <VerticalStackLayout Grid.Column="0" Spacing="4">
+                            <Label x:Name="CurrentKeyLabel" Text="🔑 Текущий ключ: -" FontSize="12" TextColor="#666"/>
+                            <Label x:Name="CurrentAddressLabel" Text="📍 Генерируемый адрес: -" FontSize="12" TextColor="#666"/>
+                            <Label x:Name="ProcessedKeysLabel" Text="📈 Обработано: 0" FontSize="12" TextColor="#666"/>
+                        </VerticalStackLayout>
+                        
+                        <VerticalStackLayout Grid.Column="1" Spacing="4">
+                            <Label x:Name="SpeedLabel" Text="⚡ Скорость: 0 к/с" FontSize="12" TextColor="#666"/>
+                            <Label x:Name="ProgressLabel" Text="📊 Прогресс: 0%" FontSize="12" TextColor="#666"/>
+                            <Label x:Name="ElapsedTimeLabel" Text="⏱️ Время: 00:00:00" FontSize="12" TextColor="#666"/>
+                        </VerticalStackLayout>
+                    </Grid>
+                    
+                    <Frame BackgroundColor="#E3F2FD" CornerRadius="8" Padding="8">
+                        <Label x:Name="StatusLabel" Text="⏳ Статус: Ожидание" FontSize="14" FontAttributes="Bold" TextColor="#1976D2"/>
+                    </Frame>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Results Display -->
+            <Frame Grid.Row="6" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label x:Name="ResultLabel" 
+                           Text="🎯 Результат поиска" 
+                           FontSize="18" 
+                           FontAttributes="Bold"
+                           TextColor="#1976D2"/>
+                    
+                    <VerticalStackLayout x:Name="ResultDetails" 
+                                        IsVisible="False" 
+                                        Spacing="8"
+                                        BackgroundColor="#F1F8E9"
+                                        Padding="12">
+                        <Label x:Name="FoundKeyLabel" Text="" FontSize="14" FontAttributes="Bold" TextColor="#2E7D32"/>
+                        <Label x:Name="AddressLabel" Text="" FontSize="14" TextColor="#2E7D32"/>
+                        <Label x:Name="BalanceLabel" Text="" FontSize="14" TextColor="#2E7D32"/>
+                        <Label x:Name="ProcessingTimeLabel" Text="" FontSize="14" TextColor="#2E7D32"/>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Log Display -->
+            <Frame Grid.Row="7" 
+                   BackgroundColor="White" 
+                   CornerRadius="12" 
+                   Padding="16"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="📝 Лог операций" 
+                          FontSize="18" 
+                          FontAttributes="Bold"
+                          TextColor="#1976D2"/>
+                    
+                    <Frame BackgroundColor="#FAFAFA" 
+                           CornerRadius="8" 
+                           Padding="12"
+                           HeightRequest="200">
+                        <ScrollView>
+                            <Label x:Name="LogLabel" 
+                                   Text="" 
+                                   FontSize="11" 
+                                   FontFamily="Monospace"
+                                   TextColor="#424242"/>
+                        </ScrollView>
+                    </Frame>
+                </VerticalStackLayout>
+            </Frame>
+
+        </Grid>
+    </ScrollView>
+
+</ContentPage>

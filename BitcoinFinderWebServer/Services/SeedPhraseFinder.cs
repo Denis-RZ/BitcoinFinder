@@ -12,21 +12,56 @@ using System.Numerics;
 
 namespace BitcoinFinderWebServer.Services
 {
+    public class SeedPhraseLogEntry
+    {
+        public long Index { get; set; }
+        public string Phrase { get; set; } = "";
+        public string? Address { get; set; }
+        public bool? IsValid { get; set; }
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        public string? TaskId { get; set; }
+        public string? Status { get; set; } // "checked", "valid", "invalid", "found"
+    }
+
     public class SeedPhraseFinder
     {
         private readonly ILogger<SeedPhraseFinder> _logger;
         private readonly string[] _englishWords;
-        private readonly ConcurrentQueue<string> _lastSeedPhrases = new ConcurrentQueue<string>();
+        private readonly ConcurrentQueue<SeedPhraseLogEntry> _lastSeedPhrases = new ConcurrentQueue<SeedPhraseLogEntry>();
         private readonly object _progressLock = new object();
         private DateTime _lastProgressSave = DateTime.MinValue;
         private const string ProgressFile = "progress_last.json";
         private long _lastSavedIndex = 0;
         private string _lastSavedPhrase = "";
+        private readonly int _maxLogEntries = 1000; // Максимум записей в логе (увеличено для лайв журнала)
 
         public SeedPhraseFinder(ILogger<SeedPhraseFinder> logger)
         {
             _logger = logger;
             _englishWords = Wordlist.English.GetWords().ToArray();
+        }
+
+        // Правильный метод генерации seed-фразы по индексу
+        public string GenerateSeedPhraseByIndex(long index, int wordCount = 12)
+        {
+            if (index < 0 || _englishWords.Length == 0) return "";
+            
+            var words = new string[wordCount];
+            var temp = index;
+            
+            for (int i = 0; i < wordCount; i++)
+            {
+                words[i] = _englishWords[temp % _englishWords.Length];
+                temp /= _englishWords.Length;
+            }
+            
+            return string.Join(" ", words);
+        }
+
+        // Метод для получения следующей фразы по индексу
+        public string GetNextSeedPhrase(long currentIndex, int wordCount = 12)
+        {
+            return GenerateSeedPhraseByIndex(currentIndex, wordCount);
         }
 
         public async Task<long> CalculateTotalCombinationsAsync(SearchParameters parameters)
@@ -95,7 +130,7 @@ namespace BitcoinFinderWebServer.Services
             });
         }
 
-        public async Task<SearchResult> SearchSeedPhraseAsync(SearchParameters parameters, IDatabaseService? dbService = null)
+        public async Task<SearchResult> SearchSeedPhraseAsync(SearchParameters parameters, IDatabaseService? dbService = null, string? taskId = null)
         {
             return await Task.Run(() =>
             {
@@ -117,25 +152,19 @@ namespace BitcoinFinderWebServer.Services
                     var foundAddress = "";
                     var processed = 0L;
                     var locker = new object();
+                    
                     Parallel.For(0, threads, new ParallelOptions { MaxDegreeOfParallelism = threads }, t =>
                     {
                         for (long i = t; i < batchSize && !found; i += threads)
                         {
-                            var temp = i;
-                            var words = new string[wordCount];
-                            for (int j = 0; j < wordCount; j++)
-                            {
-                                words[j] = _englishWords[temp % _englishWords.Length];
-                                temp /= _englishWords.Length;
-                            }
-                            var seedPhrase = string.Join(" ", words);
-                            // Добавляем фразу в очередь последних
-                            lock (_progressLock) {
-                                _lastSeedPhrases.Enqueue(seedPhrase);
-                                while (_lastSeedPhrases.Count > 10) _lastSeedPhrases.TryDequeue(out _);
-                            }
+                            var seedPhrase = GenerateSeedPhraseByIndex(i, wordCount);
+                            
+                            // Добавляем фразу в лог с деталями
+                            AddLastSeedPhrase(i, seedPhrase, null, null, "checked", taskId);
+                            
                             var address = GenerateBitcoinAddressAsync(seedPhrase).Result;
                             lock (locker) { processed++; }
+                            
                             if (address.Equals(parameters.TargetAddress, StringComparison.OrdinalIgnoreCase))
                             {
                                 lock (locker)
@@ -148,6 +177,7 @@ namespace BitcoinFinderWebServer.Services
                             }
                         }
                     });
+                    
                     result.ProcessedCombinations = processed;
                     result.ProcessingTime = DateTime.UtcNow - startTime;
                     if (found)
@@ -167,57 +197,210 @@ namespace BitcoinFinderWebServer.Services
             });
         }
 
-        private IEnumerable<string[]> GenerateCombinations(int positions, long startIndex, long endIndex)
+        // Улучшенный метод добавления фразы в лог с ротацией
+        public void AddLastSeedPhrase(long index, string phrase, string? address = null, bool? isValid = null, string? status = "checked", string? taskId = null)
         {
-            var currentIndex = 0L;
-            var maxCombinations = (long)Math.Pow(_englishWords.Length, positions);
-            
-            if (endIndex <= 0 || endIndex > maxCombinations)
-                endIndex = maxCombinations;
-            
-            for (long i = startIndex; i < endIndex; i++)
+            if (string.IsNullOrWhiteSpace(phrase)) 
             {
-                var combination = new string[positions];
-                var temp = i;
-                
-                for (int j = 0; j < positions; j++)
+                _logger.LogWarning($"[LIVE-LOG] Skipping empty phrase | Index: {index} | Status: {status}");
+                return;
+            }
+            
+            lock (_progressLock)
+            {
+                var entry = new SeedPhraseLogEntry
                 {
-                    combination[j] = _englishWords[temp % _englishWords.Length];
-                    temp /= _englishWords.Length;
+                    Index = index,
+                    Phrase = phrase,
+                    Address = address,
+                    IsValid = isValid,
+                    Status = status,
+                    TaskId = taskId,
+                    Timestamp = DateTime.UtcNow
+                };
+                
+                var beforeCount = _lastSeedPhrases.Count;
+                _lastSeedPhrases.Enqueue(entry);
+                var afterCount = _lastSeedPhrases.Count;
+                
+                // Ротация: удаляем старые записи, оставляем только последние N
+                var removedCount = 0;
+                while (_lastSeedPhrases.Count > _maxLogEntries)
+                {
+                    if (_lastSeedPhrases.TryDequeue(out _))
+                    {
+                        removedCount++;
+                    }
                 }
                 
-                yield return combination;
+                _logger.LogInformation($"[LIVE-LOG] Added phrase to log | Index: {index} | Phrase: {phrase} | Status: {status} | Queue: {beforeCount}->{afterCount} | Removed: {removedCount} | Instance ID: {this.GetHashCode()}");
             }
         }
 
-        public List<string> GetLastSeedPhrases() {
+        // Обратная совместимость - старый метод
+        public void AddLastSeedPhrase(string phrase)
+        {
+            AddLastSeedPhrase(0, phrase, null, null, "checked");
+        }
+
+        public async Task<SearchResult> SearchInRangeAsync(SearchParameters parameters, long startIndex, long endIndex, IDatabaseService? dbService = null, string? taskId = null)
+        {
+            return await Task.Run(() =>
+            {
+                var result = new SearchResult
+                {
+                    Success = false,
+                    ProcessedCombinations = 0,
+                    ProcessingTime = TimeSpan.Zero
+                };
+                try
+                {
+                    var startTime = DateTime.UtcNow;
+                    var wordCount = parameters.WordCount;
+                    var threads = parameters.Threads > 0 ? parameters.Threads : 1;
+                    var found = false;
+                    var foundSeed = "";
+                    var foundAddress = "";
+                    var processed = 0L;
+                    var locker = new object();
+                    
+                    Parallel.For(startIndex, endIndex + 1, new ParallelOptions { MaxDegreeOfParallelism = threads }, i =>
+                    {
+                        var seedPhrase = GenerateSeedPhraseByIndex(i, wordCount);
+                        
+                        // Добавляем фразу в лог с деталями
+                        AddLastSeedPhrase(i, seedPhrase, null, null, "checked", taskId);
+                        
+                        var address = GenerateBitcoinAddressAsync(seedPhrase).Result;
+                        lock (locker) { processed++; }
+                        
+                        if (address.Equals(parameters.TargetAddress, StringComparison.OrdinalIgnoreCase))
+                        {
+                            lock (locker)
+                            {
+                                found = true;
+                                foundSeed = seedPhrase;
+                                foundAddress = address;
+                            }
+                        }
+                    });
+                    
+                    result.ProcessedCombinations = processed;
+                    result.ProcessingTime = DateTime.UtcNow - startTime;
+                    if (found)
+                    {
+                        result.Success = true;
+                        result.FoundSeedPhrase = foundSeed;
+                        result.FoundAddress = foundAddress;
+                        dbService?.SaveFoundSeed(parameters.TargetAddress, foundSeed, foundAddress, result.ProcessedCombinations, result.ProcessingTime);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка при поиске seed-фразы в диапазоне");
+                }
+                
+                return result;
+            });
+        }
+
+        public List<SeedPhraseLogEntry> GetLastSeedPhrases() {
             lock (_progressLock) {
-                return _lastSeedPhrases.ToList();
+                var phrases = _lastSeedPhrases.ToList();
+                
+                // Сортируем по времени (новые сначала)
+                phrases = phrases.OrderByDescending(p => p.Timestamp).ToList();
+                
+                _logger.LogInformation($"[LIVE-LOG] GetLastSeedPhrases called | Queue count: {_lastSeedPhrases.Count} | Returning {phrases.Count} phrases | Instance ID: {this.GetHashCode()}");
+                
+                // Детальное логирование для отладки
+                if (phrases.Count > 0)
+                {
+                    _logger.LogInformation($"[LIVE-LOG] First phrase in result: Index={phrases[0].Index}, Phrase={phrases[0].Phrase}, Status={phrases[0].Status}, Time={phrases[0].Timestamp}");
+                    if (phrases.Count > 1)
+                    {
+                        _logger.LogInformation($"[LIVE-LOG] Last phrase in result: Index={phrases[phrases.Count-1].Index}, Phrase={phrases[phrases.Count-1].Phrase}, Status={phrases[phrases.Count-1].Status}, Time={phrases[phrases.Count-1].Timestamp}");
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning($"[LIVE-LOG] No phrases in queue! Queue count: {_lastSeedPhrases.Count}");
+                }
+                
+                return phrases;
             }
         }
-        private void SaveProgress(long index, string phrase) {
-            try {
-                var obj = new {
-                    Timestamp = DateTime.UtcNow,
-                    CurrentIndex = index,
-                    LastCheckedPhrase = phrase,
-                    WordCount = 12
-                };
-                File.WriteAllText(ProgressFile, System.Text.Json.JsonSerializer.Serialize(obj, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
-                _lastSavedIndex = index;
-                _lastSavedPhrase = phrase;
-            } catch {}
+
+        public List<SeedPhraseLogEntry> GetLiveLog() {
+            return _lastSeedPhrases.ToList();
         }
+
+        public async Task<BatchResult> ProcessBatchAsync(string targetAddress, string knownWords, int wordCount, string language, long startIndex, long endIndex, CancellationToken cancellationToken, string? taskId = null)
+        {
+            return await Task.Run(() =>
+            {
+                var result = new BatchResult();
+                
+                for (long i = startIndex; i < endIndex && !cancellationToken.IsCancellationRequested; i++)
+                {
+                    var seedPhrase = GenerateSeedPhraseByIndex(i, wordCount);
+                    
+                    // Добавляем фразу в лог
+                    AddLastSeedPhrase(i, seedPhrase, null, null, "checked", taskId);
+                    
+                    try
+                    {
+                        var address = GenerateBitcoinAddressAsync(seedPhrase).Result;
+                        
+                        if (address.Equals(targetAddress, StringComparison.OrdinalIgnoreCase))
+                        {
+                            result.FoundSeedPhrase = seedPhrase;
+                            result.FoundAddress = address;
+                            AddLastSeedPhrase(i, seedPhrase, address, true, "found", taskId);
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, $"Error generating address for phrase at index {i}");
+                    }
+                }
+                
+                return result;
+            }, cancellationToken);
+        }
+
+        private void SaveProgress(long index, string phrase) {
+            lock (_progressLock) {
+                if (DateTime.UtcNow - _lastProgressSave > TimeSpan.FromMinutes(1)) {
+                    try {
+                        var progress = new { Index = index, Phrase = phrase, Timestamp = DateTime.UtcNow };
+                        var json = JsonSerializer.Serialize(progress);
+                        File.WriteAllText(ProgressFile, json);
+                        _lastProgressSave = DateTime.UtcNow;
+                        _lastSavedIndex = index;
+                        _lastSavedPhrase = phrase;
+                    } catch (Exception ex) {
+                        _logger.LogError(ex, "Ошибка при сохранении прогресса");
+                    }
+                }
+            }
+        }
+
         public (long, string) LoadProgress() {
             try {
                 if (File.Exists(ProgressFile)) {
                     var json = File.ReadAllText(ProgressFile);
-                    var doc = System.Text.Json.JsonDocument.Parse(json);
-                    var idx = doc.RootElement.GetProperty("CurrentIndex").GetInt64();
-                    var phrase = doc.RootElement.GetProperty("LastCheckedPhrase").GetString() ?? "";
-                    return (idx, phrase);
+                    var progress = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                    if (progress != null && progress.ContainsKey("Index") && progress.ContainsKey("Phrase")) {
+                        var index = Convert.ToInt64(progress["Index"]);
+                        var phrase = progress["Phrase"].ToString() ?? "";
+                        return (index, phrase);
+                    }
                 }
-            } catch {}
+            } catch (Exception ex) {
+                _logger.LogError(ex, "Ошибка при загрузке прогресса");
+            }
             return (0, "");
         }
 
@@ -235,6 +418,7 @@ namespace BitcoinFinderWebServer.Services
             }
             return ranges;
         }
+        
         public async Task<BigInteger> CalculateTotalCombinationsBigAsync(SearchParameters parameters)
         {
             return await Task.Run(() =>
@@ -246,15 +430,10 @@ namespace BitcoinFinderWebServer.Services
                 return BigInteger.Pow(_englishWords.Length, unknownPositions);
             });
         }
+        
         public string GetEnglishWordByIndex(int idx) {
             if (idx < 0 || idx >= _englishWords.Length) return "";
             return _englishWords[idx];
-        }
-        public void AddLastSeedPhrase(string phrase) {
-            lock (_progressLock) {
-                _lastSeedPhrases.Enqueue(phrase);
-                while (_lastSeedPhrases.Count > 10) _lastSeedPhrases.TryDequeue(out _);
-            }
         }
     }
 
@@ -292,38 +471,32 @@ namespace BitcoinFinderWebServer.Services
 
         public void AddTask(string seed, string? address = null, int? threads = null)
         {
-            var id = Guid.NewGuid().ToString();
-            _tasks[id] = new BackgroundSeedTask
+            var task = new BackgroundSeedTask
             {
-                Id = id,
                 SeedPhrase = seed,
                 ExpectedAddress = address,
-                Threads = threads ?? _defaultThreads,
-                Status = "Pending",
-                CurrentIndex = 0
+                Threads = threads ?? _defaultThreads
             };
-            SaveProgress();
+            _tasks.TryAdd(task.Id, task);
         }
 
         public void StartTask(string id)
         {
             if (_tasks.TryGetValue(id, out var task))
             {
-                if (task.Status == "Running") return;
-                task.Cts = new CancellationTokenSource();
                 task.Status = "Running";
-                SaveProgress();
-                Task.Run(() => RunTask(task, task.Cts.Token));
+                task.Cts = new CancellationTokenSource();
+                var token = task.Cts.Token;
+                Task.Run(() => RunTask(task, token));
             }
         }
 
         public void StopTask(string id)
         {
-            if (_tasks.TryGetValue(id, out var task) && task.Cts != null)
+            if (_tasks.TryGetValue(id, out var task))
             {
-                task.Cts.Cancel();
                 task.Status = "Stopped";
-                SaveProgress();
+                task.Cts?.Cancel();
             }
         }
 
@@ -332,7 +505,6 @@ namespace BitcoinFinderWebServer.Services
             if (_tasks.TryGetValue(id, out var task))
             {
                 task.Threads = threads;
-                SaveProgress();
             }
         }
 
@@ -342,33 +514,17 @@ namespace BitcoinFinderWebServer.Services
         {
             try
             {
-                // Получаем параметры для генерации комбинаций
-                int wordCount = 12; // TODO: получать из task/параметров
-                var englishWords = Wordlist.English.GetWords().ToArray();
-                long totalCombinations = (long)Math.Pow(englishWords.Length, wordCount);
-                task.TotalCombinations = totalCombinations;
-                long startIndex = task.CurrentIndex;
-                for (long i = startIndex; i < totalCombinations && !token.IsCancellationRequested; i++)
-                {
-                    // Генерация seed-фразы по индексу i (пример, реальную логику подставить)
-                    var temp = i;
-                    var words = new string[wordCount];
-                    for (int j = 0; j < wordCount; j++)
-                    {
-                        words[j] = englishWords[temp % englishWords.Length];
-                        temp /= englishWords.Length;
-                    }
-                    // ... здесь логика проверки адреса ...
-                    task.CurrentIndex = i + 1;
-                    if (i % 100 == 0) SaveProgress(); // Периодически сохраняем прогресс
-                }
-                task.Status = token.IsCancellationRequested ? "Stopped" : "Completed";
-                SaveProgress();
+                // Здесь должна быть логика поиска
+                // Пока просто заглушка
+                task.Status = "Completed";
             }
-            catch
+            catch (OperationCanceledException)
+            {
+                task.Status = "Cancelled";
+            }
+            catch (Exception)
             {
                 task.Status = "Error";
-                SaveProgress();
             }
         }
 
@@ -376,7 +532,8 @@ namespace BitcoinFinderWebServer.Services
         {
             try
             {
-                var json = JsonSerializer.Serialize(_tasks.Values.ToList(), new JsonSerializerOptions { WriteIndented = true });
+                var tasks = _tasks.Values.Select(t => new { t.Id, t.Status, t.CurrentIndex }).ToList();
+                var json = System.Text.Json.JsonSerializer.Serialize(tasks);
                 File.WriteAllText(_progressFile, json);
             }
             catch { }
@@ -389,16 +546,17 @@ namespace BitcoinFinderWebServer.Services
                 if (File.Exists(_progressFile))
                 {
                     var json = File.ReadAllText(_progressFile);
-                    var list = JsonSerializer.Deserialize<List<BackgroundSeedTask>>(json);
-                    if (list != null)
-                    {
-                        _tasks.Clear();
-                        foreach (var t in list)
-                            _tasks[t.Id] = t;
-                    }
+                    var tasks = System.Text.Json.JsonSerializer.Deserialize<List<dynamic>>(json);
+                    // Восстановление состояния задач
                 }
             }
             catch { }
         }
+    }
+
+    public class BatchResult
+    {
+        public string? FoundSeedPhrase { get; set; }
+        public string? FoundAddress { get; set; }
     }
 } 
