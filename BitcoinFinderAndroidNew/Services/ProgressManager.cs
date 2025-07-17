@@ -78,6 +78,23 @@ namespace BitcoinFinderAndroidNew.Services
             }
         }
 
+        public void SaveFoundResults(List<FoundResult> results)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true });
+                
+                lock (lockObject)
+                {
+                    File.WriteAllText(resultsFilePath, json);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Ошибка сохранения результатов: {ex.Message}");
+            }
+        }
+
         public List<FoundResult> LoadFoundResults()
         {
             try

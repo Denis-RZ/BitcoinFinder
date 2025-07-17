@@ -46,7 +46,8 @@ namespace BitcoinFinderAndroidNew.Services
         public long ProcessedKeys { get; set; } = 0;
         public long TotalKeys { get; set; } = 0;
         public double Progress { get; set; } = 0;
-        public double Speed { get; set; } = 0; // keys per second
+        public double Speed { get; set; } = 0; // keys per second (legacy)
+        public long KeysPerSecond { get; set; } = 0; // keys per second (new)
         public TimeSpan ElapsedTime { get; set; }
         public TimeSpan EstimatedTimeRemaining { get; set; }
         public string Status { get; set; } = "";
@@ -74,10 +75,12 @@ namespace BitcoinFinderAndroidNew.Services
     public class FoundResult
     {
         public string PrivateKey { get; set; } = "";
-        public string BitcoinAddress { get; set; } = "";
+        public string BitcoinAddress { get; set; } = ""; // Legacy
+        public string Address { get; set; } = ""; // New
         public decimal Balance { get; set; } = 0;
         public DateTime FoundAt { get; set; } = DateTime.Now;
         public long FoundAtIndex { get; set; } = 0;
+        public TimeSpan ProcessingTime { get; set; } = TimeSpan.Zero;
     }
 
     public class AppSettings

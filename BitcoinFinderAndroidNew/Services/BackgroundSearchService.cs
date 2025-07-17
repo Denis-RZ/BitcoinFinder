@@ -22,6 +22,7 @@ namespace BitcoinFinderAndroidNew.Services
         private DateTime startTime;
         private long totalProcessed = 0;
         private string targetAddress = "";
+        private long lastSavedIndex = 0;
 
         public event Action<ProgressInfo>? ProgressReported;
         public event Action<string>? LogMessage;
@@ -64,6 +65,7 @@ namespace BitcoinFinderAndroidNew.Services
                         EndIndex = parameters.EndIndex,
                         Format = parameters.Format,
                         Network = parameters.Network,
+                        CurrentIndex = parameters.StartIndex, // Начинаем с указанного индекса
                         IsActive = true
                     };
                 }
@@ -72,11 +74,10 @@ namespace BitcoinFinderAndroidNew.Services
                 isRunning = true;
                 startTime = DateTime.Now;
                 totalProcessed = 0;
+                lastSavedIndex = currentProgress.CurrentIndex;
 
-                LogMessage?.Invoke($"Начинаем поиск приватного ключа для адреса: {targetAddress}");
-                LogMessage?.Invoke($"Диапазон: {currentProgress.StartIndex:N0} - {currentProgress.EndIndex:N0}");
-                LogMessage?.Invoke($"Формат: {parameters.Format}, Сеть: {parameters.Network}");
-                LogMessage?.Invoke($"Потоков: {parameters.ThreadCount}");
+                LogMessage?.Invoke($"Начинаем поиск: {targetAddress}");
+                LogMessage?.Invoke($"Начальная позиция: {currentProgress.CurrentIndex:N0}");
 
                 var tasks = new List<Task>();
                 FoundResult? foundResult = null;
@@ -147,23 +148,22 @@ namespace BitcoinFinderAndroidNew.Services
                     }
                 }
 
-                // Очищаем прогресс после завершения
-                progressManager.ClearProgress();
-                
+                // Очищаем прогресс только если поиск завершен успешно
                 if (foundResult != null)
                 {
+                    progressManager.ClearProgress();
                     LogMessage?.Invoke("🎉 ПРИВАТНЫЙ КЛЮЧ НАЙДЕН!");
                 }
                 else
                 {
-                    LogMessage?.Invoke("Поиск завершен - ключ не найден в указанном диапазоне");
+                    LogMessage?.Invoke("Поиск завершен - ключ не найден");
                 }
                 
                 return foundResult != null;
             }
             catch (OperationCanceledException)
             {
-                LogMessage?.Invoke("Поиск остановлен пользователем");
+                LogMessage?.Invoke("Поиск остановлен");
                 return false;
             }
             catch (Exception ex)
@@ -216,10 +216,11 @@ namespace BitcoinFinderAndroidNew.Services
                             var result = new FoundResult
                             {
                                 PrivateKey = privateKey,
-                                BitcoinAddress = bitcoinAddress,
+                                Address = bitcoinAddress,
                                 Balance = 0, // Баланс будет проверен отдельно
                                 FoundAt = DateTime.Now,
-                                FoundAtIndex = localCurrent
+                                FoundAtIndex = localCurrent,
+                                ProcessingTime = DateTime.Now - startTime
                             };
 
                             LogMessage?.Invoke($"🎯 НАЙДЕН ПРИВАТНЫЙ КЛЮЧ!");
@@ -240,10 +241,23 @@ namespace BitcoinFinderAndroidNew.Services
                         currentProgress.CurrentIndex = localCurrent;
                     }
 
+                    // Автосохранение каждые 1000 ключей
+                    if (localCurrent - lastSavedIndex >= 1000)
+                    {
+                        lastSavedIndex = localCurrent;
+                        if (currentProgress != null)
+                        {
+                            currentProgress.ElapsedTime = DateTime.Now - startTime;
+                            currentProgress.LastSaved = DateTime.Now;
+                            progressManager.SaveProgress(currentProgress);
+                            ProgressSaved?.Invoke(currentProgress);
+                        }
+                    }
+
                     // Отправляем отчет о прогрессе каждые 100 ключей
                     if (localCurrent % 100 == 0)
                     {
-                        ReportProgress(threadId, privateKey, bitcoinAddress);
+                        ReportProgress(threadId, localCurrent.ToString(), bitcoinAddress);
                         await Task.Delay(1, cancellationToken); // Небольшая пауза для UI
                     }
                 }
@@ -263,7 +277,7 @@ namespace BitcoinFinderAndroidNew.Services
             {
                 try
                 {
-                    await Task.Delay(5000, cancellationToken); // Сохраняем каждые 5 секунд
+                    await Task.Delay(10000, cancellationToken); // Сохраняем каждые 10 секунд как резерв
                     
                     if (currentProgress != null)
                     {
@@ -288,7 +302,6 @@ namespace BitcoinFinderAndroidNew.Services
         {
             var elapsed = DateTime.Now - startTime;
             var speed = totalProcessed / Math.Max(elapsed.TotalSeconds, 1);
-            var progress = (double)totalProcessed / Math.Max(currentProgress?.EndIndex - currentProgress?.StartIndex ?? 1, 1) * 100;
             
             var progressInfo = new ProgressInfo
             {
@@ -296,10 +309,10 @@ namespace BitcoinFinderAndroidNew.Services
                 CurrentAddress = currentAddress,
                 ProcessedKeys = totalProcessed,
                 TotalKeys = currentProgress?.EndIndex - currentProgress?.StartIndex ?? 0,
-                Progress = progress,
-                Speed = speed,
+                Progress = 0, // Не показываем процент для бесконечного поиска
+                KeysPerSecond = (long)speed,
                 ElapsedTime = elapsed,
-                EstimatedTimeRemaining = TimeSpan.FromSeconds((currentProgress?.EndIndex ?? 0 - totalProcessed) / Math.Max(speed, 1)),
+                EstimatedTimeRemaining = TimeSpan.Zero, // Не показываем для бесконечного поиска
                 Status = "Поиск выполняется",
                 TargetAddress = targetAddress
             };
